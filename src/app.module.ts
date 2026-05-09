@@ -42,7 +42,7 @@ import Redis from 'ioredis';
         const isDev = configService.get('NODE_ENV') === 'development';
         
         // Check if REDIS_URL is provided (Railway, Heroku, etc.)
-        const redisUrl = configService.get('REDIS_URL');
+        const redisUrl = configService.get('redis.url') || configService.get('REDIS_URL');
         
         let redis: Redis;
         if (redisUrl) {
