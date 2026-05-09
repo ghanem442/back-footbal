@@ -21,6 +21,10 @@ export class AppConfigService {
     return this.configService.get<string>('database.url')!;
   }
 
+  get redisUrl(): string | undefined {
+    return this.configService.get<string>('redis.url');
+  }
+
   get redisHost(): string {
     return this.configService.get<string>('redis.host', 'localhost');
   }

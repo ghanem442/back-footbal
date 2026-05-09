@@ -9,6 +9,7 @@ export default () => ({
     url: process.env.DATABASE_URL,
   },
   redis: {
+    url: process.env.REDIS_URL, // Railway provides full Redis URL
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT || '6379', 10),
     password: process.env.REDIS_PASSWORD || undefined,
@@ -62,6 +63,15 @@ export default () => ({
       apiKey: process.env.SENDGRID_API_KEY,
       fromEmail: process.env.SENDGRID_FROM_EMAIL,
       fromName: process.env.SENDGRID_FROM_NAME,
+    },
+    smtp: {
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT,
+      secure: process.env.SMTP_SECURE,
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+      fromEmail: process.env.SMTP_FROM_EMAIL,
+      fromName: process.env.SMTP_FROM_NAME,
     },
   },
   fcm: {

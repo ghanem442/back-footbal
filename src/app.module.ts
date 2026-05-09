@@ -41,12 +41,22 @@ import Redis from 'ioredis';
       useFactory: (configService: ConfigService) => {
         const isDev = configService.get('NODE_ENV') === 'development';
         
-        const redis = new Redis({
-          host: configService.get('REDIS_HOST', 'localhost'),
-          port: configService.get('REDIS_PORT', 6379),
-          password: configService.get('REDIS_PASSWORD'),
-          db: configService.get('REDIS_THROTTLE_DB', 1),
-        });
+        // Check if REDIS_URL is provided (Railway, Heroku, etc.)
+        const redisUrl = configService.get('REDIS_URL');
+        
+        let redis: Redis;
+        if (redisUrl) {
+          // Use REDIS_URL if provided
+          redis = new Redis(redisUrl);
+        } else {
+          // Fallback to individual config values
+          redis = new Redis({
+            host: configService.get('REDIS_HOST', 'localhost'),
+            port: configService.get('REDIS_PORT', 6379),
+            password: configService.get('REDIS_PASSWORD'),
+            db: configService.get('REDIS_THROTTLE_DB', 1),
+          });
+        }
 
         return {
           throttlers: [

@@ -10,14 +10,24 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   constructor(private configService: AppConfigService) {}
 
   async onModuleInit() {
-    const redisConfig = {
-      socket: {
-        host: this.configService.redisHost,
-        port: this.configService.redisPort,
-      },
-      password: this.configService.redisPassword,
-      database: this.configService.redisDb,
-    };
+    const redisUrl = this.configService.redisUrl;
+    
+    let redisConfig: any;
+    
+    if (redisUrl) {
+      // Use REDIS_URL if provided (Railway, Heroku, etc.)
+      redisConfig = { url: redisUrl };
+    } else {
+      // Fallback to individual config values
+      redisConfig = {
+        socket: {
+          host: this.configService.redisHost,
+          port: this.configService.redisPort,
+        },
+        password: this.configService.redisPassword,
+        database: this.configService.redisDb,
+      };
+    }
 
     // Cache client
     this.cacheClient = createClient(redisConfig);
@@ -56,6 +66,14 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
    * BullMQ needs connection options, not the client itself
    */
   getConnectionOptions() {
+    const redisUrl = this.configService.redisUrl;
+    
+    if (redisUrl) {
+      // Parse URL for BullMQ (it accepts URL string directly in newer versions)
+      // Or return URL directly if BullMQ supports it
+      return redisUrl;
+    }
+    
     return {
       host: this.configService.redisHost,
       port: this.configService.redisPort,
