@@ -15,25 +15,28 @@ export class EmailService {
    * Initialize email transporter (SMTP or SendGrid)
    */
   private initializeTransporter(): void {
-    // Check for SMTP configuration first
-    const smtpHost = this.configService.get('SMTP_HOST');
-    const smtpUser = this.configService.get('SMTP_USER');
-    const smtpPass = this.configService.get('SMTP_PASS');
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
 
     if (smtpHost && smtpUser && smtpPass) {
       this.transporter = nodemailer.createTransport({
         host: smtpHost,
-        port: parseInt(this.configService.get('SMTP_PORT') || '587'),
-        secure: this.configService.get('SMTP_SECURE') === 'true',
-        auth: {
-          user: smtpUser,
-          pass: smtpPass,
-        },
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: process.env.SMTP_SECURE === 'true',
+        auth: { user: smtpUser, pass: smtpPass },
       });
       this.logger.log('✅ SMTP Email service initialized');
     } else {
       this.logger.warn('⚠️ No SMTP configuration found');
     }
+  }
+
+  private getTransporter(): nodemailer.Transporter | null {
+    if (!this.transporter) {
+      this.initializeTransporter();
+    }
+    return this.transporter;
   }
 
   /**
@@ -66,12 +69,12 @@ export class EmailService {
     const text = `Welcome to Football Booking! Please verify your email address by visiting: ${verifyUrl}\n\nThis link will expire in 24 hours.\n\nIf you did not create an account, please ignore this email.`;
 
     // Try SMTP first
-    if (this.transporter) {
+    if (this.getTransporter()) {
       try {
-        const fromEmail = this.configService.get('SMTP_FROM_EMAIL') || 'noreply@example.com';
-        const fromName = this.configService.get('SMTP_FROM_NAME') || 'Football Booking';
+        const fromEmail = process.env.SMTP_FROM_EMAIL || 'noreply@example.com';
+        const fromName = process.env.SMTP_FROM_NAME || 'Football Booking';
 
-        await this.transporter.sendMail({
+        await this.getTransporter()!.sendMail({
           from: `"${fromName}" <${fromEmail}>`,
           to: email,
           subject,
@@ -142,6 +145,45 @@ export class EmailService {
       If you did not create an account, please ignore this email.
       ========================================
     `);
+  }
+
+  /**
+   * Send OTP password reset email via SMTP
+   */
+  async sendPasswordResetOtp(email: string, otp: string): Promise<void> {
+    const transporter = this.getTransporter();
+
+    if (transporter) {
+      try {
+        const fromEmail = process.env.SMTP_FROM_EMAIL || 'noreply@example.com';
+        const fromName = process.env.SMTP_FROM_NAME || 'Football Booking';
+
+        await transporter.sendMail({
+          from: `"${fromName}" <${fromEmail}>`,
+          to: email,
+          subject: 'Password Reset OTP',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2>Password Reset Request</h2>
+              <p>Use the following OTP to reset your password. It expires in 15 minutes.</p>
+              <div style="text-align: center; margin: 30px 0;">
+                <span style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #4CAF50;">${otp}</span>
+              </div>
+              <p style="color: #999; font-size: 12px;">If you did not request this, please ignore this email.</p>
+            </div>
+          `,
+          text: `Your password reset OTP is: ${otp}\n\nIt expires in 15 minutes.\n\nIf you did not request this, please ignore this email.`,
+        });
+
+        this.logger.log(`✅ OTP email sent to ${email} via SMTP`);
+        return;
+      } catch (error: any) {
+        this.logger.error(`❌ Failed to send OTP email via SMTP: ${error.message}`);
+      }
+    }
+
+    // Fallback log
+    this.logger.warn(`[NO EMAIL SERVICE] OTP for ${email}: ${otp}`);
   }
 
   /**

@@ -385,50 +385,111 @@ export class AuthService {
   }
 
   /**
-   * Generate a secure password reset token
-   * @param email - User's email address
-   * @throws UnauthorizedException if user not found
+   * Dev: generate verification token without sending email
    */
-  async generatePasswordResetToken(email: string): Promise<void> {
-    // Find user by email
-    const user = await this.usersService.findByEmail(email);
-    
-    if (!user) {
-      // Don't reveal if user exists or not for security
-      // Just return silently
-      return;
-    }
-
-    // Generate secure token (plain text to send, hashed to store)
+  async devGenerateVerificationToken(userId: string): Promise<string> {
     const { plainToken, hashedToken } = TokenHasher.generateAndHashToken(32);
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 24);
 
-    // Set expiration to 1 hour from now
+    await this.prisma.emailVerificationToken.updateMany({
+      where: { userId, isUsed: false },
+      data: { isUsed: true, usedAt: new Date() },
+    });
+
+    await this.prisma.emailVerificationToken.create({
+      data: { userId, token: hashedToken, expiresAt },
+    });
+
+    return plainToken;
+  }
+
+  /**
+   * Generate OTP-based password reset (6 digits)
+   * Returns OTP in dev mode
+   */
+  async generatePasswordResetOtp(email: string): Promise<{ otp?: string }> {
+    const user = await this.usersService.findByEmail(email);
+    if (!user) return {};
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedOtp = TokenHasher.hashToken(otp);
+
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 15); // 15 min expiry
+
+    // Invalidate existing tokens
+    await this.prisma.passwordResetToken.updateMany({
+      where: { userId: user.id, isUsed: false },
+      data: { isUsed: true, usedAt: new Date() },
+    });
+
+    await this.prisma.passwordResetToken.create({
+      data: { userId: user.id, token: hashedOtp, expiresAt },
+    });
+
+    // Try to send OTP email
+    try {
+      await this.emailService.sendPasswordResetOtp(email, otp);
+    } catch {}
+
+    // Never return OTP in response (production behavior)
+    return {};
+  }
+
+  /**
+   * Reset password using OTP
+   */
+  async resetPasswordWithOtp(email: string, otp: string, newPassword: string): Promise<void> {
+    const user = await this.usersService.findByEmail(email);
+    if (!user) throw new UnauthorizedException('Invalid OTP');
+
+    const hashedOtp = TokenHasher.hashToken(otp);
+    const resetToken = await this.prisma.passwordResetToken.findFirst({
+      where: { userId: user.id, token: hashedOtp, isUsed: false },
+    });
+
+    if (!resetToken) throw new UnauthorizedException('Invalid or expired OTP');
+    if (resetToken.expiresAt < new Date()) throw new UnauthorizedException('OTP has expired');
+
+    const passwordHash = await this.usersService.hashPassword(newPassword);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: user.id }, data: { passwordHash } }),
+      this.prisma.passwordResetToken.update({
+        where: { id: resetToken.id },
+        data: { isUsed: true, usedAt: new Date() },
+      }),
+    ]);
+
+    await this.prisma.refreshToken.updateMany({
+      where: { userId: user.id, isRevoked: false },
+      data: { isRevoked: true, revokedAt: new Date() },
+    });
+  }
+
+  /**
+   * Get reset token for dev testing
+   */
+  async devGetResetToken(email: string): Promise<string> {
+    const user = await this.usersService.findByEmail(email);
+    if (!user) throw new UnauthorizedException('User not found');
+
+    const { plainToken, hashedToken } = TokenHasher.generateAndHashToken(32);
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 1);
 
-    // Invalidate any existing unused password reset tokens for this user
     await this.prisma.passwordResetToken.updateMany({
-      where: {
-        userId: user.id,
-        isUsed: false,
-      },
-      data: {
-        isUsed: true,
-        usedAt: new Date(),
-      },
+      where: { userId: user.id, isUsed: false },
+      data: { isUsed: true, usedAt: new Date() },
     });
 
-    // Store hashed token in database
     await this.prisma.passwordResetToken.create({
-      data: {
-        userId: user.id,
-        token: hashedToken,
-        expiresAt,
-      },
+      data: { userId: user.id, token: hashedToken, expiresAt },
     });
 
-    // Send reset email with plain token
-    await this.emailService.sendPasswordResetEmail(email, plainToken);
+    return plainToken;
   }
 
   /**

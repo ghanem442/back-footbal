@@ -28,7 +28,7 @@ Content-Type: application/json
 {
   bookingId: string;        // Required - UUID of the booking
   gateway: string;          // Required - Payment gateway
-  metadata?: object;        // Optional - Additional metadata
+  metadata?: object;        // Optional - Additional metadata0
 }
 ```
 

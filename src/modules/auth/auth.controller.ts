@@ -11,6 +11,7 @@ import {
   Patch,
   Res,
   BadRequestException,
+  ForbiddenException,
   Query,
   HttpException,
   InternalServerErrorException,
@@ -175,15 +176,18 @@ export class AuthController {
       let verificationToken: string | null = null;
       try {
         verificationToken = await this.authService.generateEmailVerificationToken(user.id, user.email);
-        console.log('✅ Verification token generated');
       } catch (emailError) {
-        console.error('⚠️ Failed to generate/send verification email:', emailError);
-        console.error('Email error details:', {
-          type: emailError instanceof Error ? emailError.constructor.name : typeof emailError,
-          message: emailError instanceof Error ? emailError.message : String(emailError),
-          stack: emailError instanceof Error ? emailError.stack : undefined,
-        });
-        // Don't fail registration if email fails - user can resend later
+        // Email failed — generate token directly without sending
+        try {
+          verificationToken = await this.authService.generateEmailVerificationToken(user.id, user.email);
+        } catch {}
+      }
+
+      // In dev: always generate token even if email failed
+      if (!verificationToken && process.env.NODE_ENV !== 'production') {
+        try {
+          verificationToken = await this.authService.devGenerateVerificationToken(user.id);
+        } catch {}
       }
 
       const response: any = {
@@ -201,10 +205,9 @@ export class AuthController {
         message: 'User registered successfully. Please check your email to verify your account.',
       };
 
-      // In development, include verification token in response
-      if (process.env.NODE_ENV === 'development' && verificationToken) {
+      // Always include verificationToken in dev mode
+      if (process.env.NODE_ENV !== 'production') {
         response.data.verificationToken = verificationToken;
-        response.message += ` [DEV] Verification token: ${verificationToken}`;
       }
 
       console.log('\n========================================');
@@ -596,95 +599,50 @@ export class AuthController {
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   @UseGuards(RateLimitGuard)
-  @RateLimit({ ttl: 900, limit: 3 }) // 3 attempts per 15 minutes
-  // @Throttle({ default: { limit: 20, ttl: 60000 } }) // Disabled in dev - controlled by global guard
-  @ApiOperation({
-    summary: 'Request password reset',
-    description: 'Generate and send password reset token via email. Always returns success to prevent email enumeration. Rate limited to 3 attempts per 15 minutes.',
-  })
-  @ApiBody({ type: ForgotPasswordDto })
-  @ApiResponse({
-    status: 200,
-    description: 'Password reset email sent (if account exists)',
-    schema: {
-      example: {
-        success: true,
-        message: 'If an account exists with this email, a password reset link has been sent',
-      },
-    },
-  })
-  @ApiResponse({
-    status: 429,
-    description: 'Too many password reset attempts',
-  })
+  @RateLimit({ ttl: 900, limit: 3 })
+  @ApiOperation({ summary: 'Request password reset (OTP-based)' })
   async forgotPassword(
     @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
     forgotPasswordDto: ForgotPasswordDto,
-  ): Promise<{
-    success: boolean;
-    message: string;
-  }> {
-    // Generate and send password reset token
-    await this.authService.generatePasswordResetToken(forgotPasswordDto.email);
-
-    // Always return success to prevent email enumeration
+  ) {
+    const result = await this.authService.generatePasswordResetOtp(forgotPasswordDto.email);
     return {
       success: true,
-      message: 'If an account exists with this email, a password reset link has been sent',
+      message: 'If an account exists with this email, an OTP has been sent',
     };
   }
 
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Reset password',
-    description: 'Reset user password using the token received via email. Token is single-use and expires after 1 hour.',
-  })
-  @ApiBody({ type: ResetPasswordDto })
-  @ApiResponse({
-    status: 200,
-    description: 'Password reset successfully',
-    schema: {
-      example: {
-        success: true,
-        message: 'Password has been reset successfully',
-      },
-    },
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Invalid or expired reset token',
-    schema: {
-      example: {
-        success: false,
-        error: {
-          code: 'INVALID_RESET_TOKEN',
-          message: {
-            en: 'Invalid or expired reset token',
-            ar: 'رمز إعادة التعيين غير صالح أو منتهي الصلاحية',
-          },
-        },
-        timestamp: '2024-01-15T10:30:00Z',
-      },
-    },
-  })
+  @ApiOperation({ summary: 'Reset password using OTP or token' })
   async resetPassword(
-    @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
-    resetPasswordDto: ResetPasswordDto,
-  ): Promise<{
-    success: boolean;
-    message: string;
-  }> {
-    // Reset password using token
-    await this.authService.resetPassword(
-      resetPasswordDto.token,
-      resetPasswordDto.newPassword,
-    );
+    @Body() body: { email?: string; otp?: string; token?: string; newPassword: string },
+  ) {
+    if (body.email && body.otp) {
+      // OTP-based reset
+      await this.authService.resetPasswordWithOtp(body.email, body.otp, body.newPassword);
+    } else if (body.token) {
+      // Token-based reset (legacy)
+      await this.authService.resetPassword(body.token, body.newPassword);
+    } else {
+      throw new BadRequestException('Provide either (email + otp) or token');
+    }
+    return { success: true, message: 'Password has been reset successfully' };
+  }
 
-    return {
-      success: true,
-      message: 'Password has been reset successfully',
-    };
+  /**
+   * DEV ONLY: Get reset token directly
+   * POST /auth/dev/get-reset-token
+   */
+  @Post('dev/get-reset-token')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '[DEV] Get reset token without email' })
+  async devGetResetToken(@Body('email') email: string) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new ForbiddenException('Not available in production');
+    }
+    const token = await this.authService.devGetResetToken(email);
+    return { success: true, data: { token } };
   }
 
   @Post('verify-email')
