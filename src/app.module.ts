@@ -44,11 +44,20 @@ import Redis from 'ioredis';
         // Check if REDIS_URL is provided (Railway, Heroku, etc.)
         const redisUrl = configService.get('redis.url') || configService.get('REDIS_URL');
         
+        console.log('🔴 REDIS_URL from config:', redisUrl);
+        console.log('🔴 All env REDIS vars:', {
+          REDIS_URL: process.env.REDIS_URL,
+          REDIS_HOST: process.env.REDIS_HOST,
+          REDISHOST: process.env.REDISHOST,
+        });
+        
         let redis: Redis;
         if (redisUrl) {
+          console.log('✅ Using REDIS_URL:', redisUrl);
           // Use REDIS_URL if provided
           redis = new Redis(redisUrl);
         } else {
+          console.log('❌ Falling back to localhost Redis');
           // Fallback to individual config values
           redis = new Redis({
             host: configService.get('REDIS_HOST', 'localhost'),

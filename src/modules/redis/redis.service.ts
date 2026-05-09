@@ -12,12 +12,17 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     const redisUrl = this.configService.redisUrl;
     
+    console.log('🔵 RedisService - REDIS_URL from configService:', redisUrl);
+    console.log('🔵 RedisService - Direct process.env.REDIS_URL:', process.env.REDIS_URL);
+    
     let redisConfig: any;
     
     if (redisUrl) {
+      console.log('✅ RedisService using REDIS_URL');
       // Use REDIS_URL if provided (Railway, Heroku, etc.)
       redisConfig = { url: redisUrl };
     } else {
+      console.log('❌ RedisService falling back to localhost');
       // Fallback to individual config values
       redisConfig = {
         socket: {
