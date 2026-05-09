@@ -63,15 +63,26 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Get Redis connection options for BullMQ
-   * BullMQ needs connection options, not the client itself
+   * BullMQ needs connection options object, not URL string
    */
   getConnectionOptions() {
     const redisUrl = this.configService.redisUrl;
     
     if (redisUrl) {
-      // Parse URL for BullMQ (it accepts URL string directly in newer versions)
-      // Or return URL directly if BullMQ supports it
-      return redisUrl;
+      // Parse Redis URL to connection options
+      // Format: redis://[:password@]host:port[/db]
+      try {
+        const url = new URL(redisUrl);
+        return {
+          host: url.hostname,
+          port: parseInt(url.port) || 6379,
+          password: url.password || undefined,
+          db: parseInt(url.pathname.slice(1)) || 0,
+        };
+      } catch (error) {
+        // Fallback if URL parsing fails
+        console.error('Failed to parse REDIS_URL, using defaults:', error);
+      }
     }
     
     return {
