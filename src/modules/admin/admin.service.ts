@@ -2020,7 +2020,13 @@ export class AdminService {
         where,
         include: {
           booking: {
-            include: {
+            select: {
+              id: true,
+              bookingNumber: true,
+              scheduledDate: true,
+              startTime: true,
+              endTime: true,
+              status: true,
               player: {
                 select: {
                   id: true,
