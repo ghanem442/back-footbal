@@ -2024,8 +2024,8 @@ export class AdminService {
               id: true,
               bookingNumber: true,
               scheduledDate: true,
-              startTime: true,
-              endTime: true,
+              scheduledStartTime: true,
+              scheduledEndTime: true,
               status: true,
               player: {
                 select: {
@@ -2069,8 +2069,8 @@ export class AdminService {
         id: payment.booking.id,
         bookingNumber: payment.booking.bookingNumber,
         scheduledDate: payment.booking.scheduledDate,
-        startTime: payment.booking.startTime,
-        endTime: payment.booking.endTime,
+        scheduledStartTime: payment.booking.scheduledStartTime,
+        scheduledEndTime: payment.booking.scheduledEndTime,
         status: payment.booking.status,
         player: payment.booking.player,
         field: payment.booking.field,
