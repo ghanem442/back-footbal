@@ -573,6 +573,48 @@ export class PaymentController {
   }
 
   /**
+   * Upload payment screenshot (for manual gateways like InstaPay)
+   * POST /payments/:id/upload-screenshot
+   */
+  @Post(':id/upload-screenshot')
+  @HttpCode(HttpStatus.OK)
+  async uploadScreenshot(
+    @Param('id') id: string,
+    @Body() body: { screenshotUrl: string },
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id },
+      include: { booking: true },
+    });
+
+    if (!payment) throw new NotFoundException('Payment not found');
+    if (payment.booking.playerId !== user.userId && user.role !== 'ADMIN') {
+      throw new ForbiddenException('Cannot access another user\'s payment');
+    }
+    if (!body.screenshotUrl) {
+      throw new BadRequestException('screenshotUrl is required');
+    }
+
+    const updated = await this.prisma.payment.update({
+      where: { id },
+      data: {
+        gatewayResponse: {
+          ...(payment.gatewayResponse as any),
+          screenshotUrl: body.screenshotUrl,
+          screenshotUploadedAt: new Date().toISOString(),
+        },
+      },
+    });
+
+    return {
+      success: true,
+      data: { paymentId: updated.id, screenshotUrl: body.screenshotUrl },
+      message: 'Screenshot uploaded. Awaiting admin confirmation.',
+    };
+  }
+
+  /**
    * Get payment details
    * GET /payments/:id
    */

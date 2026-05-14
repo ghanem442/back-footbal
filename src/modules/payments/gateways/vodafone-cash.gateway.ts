@@ -51,6 +51,17 @@ export class VodafoneCashGateway extends BasePaymentGateway {
   async processPayment(request: PaymentRequest): Promise<PaymentResponse> {
     this.logPaymentOperation('processPayment', { bookingId: request.bookingId, amount: request.amount });
     
+    // Return mock pending response if credentials not configured
+    if (!this.merchantId || !this.apiKey || !this.secretKey) {
+      this.logger.warn('Vodafone Cash not configured - returning mock PENDING response');
+      return {
+        transactionId: `VF-MOCK-${request.bookingId}-${Date.now()}`,
+        status: 'PENDING',
+        gatewayResponse: { mock: true, message: 'Awaiting manual confirmation' },
+        redirectUrl: undefined,
+      };
+    }
+    
     try {
       const transactionRef = `VF-${request.bookingId}-${Date.now()}`;
       

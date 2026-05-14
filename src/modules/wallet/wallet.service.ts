@@ -22,12 +22,16 @@ export class WalletService {
    * Get wallet by user ID
    */
   async getWalletByUserId(userId: string): Promise<Wallet> {
-    const wallet = await this.prisma.wallet.findUnique({
+    let wallet = await this.prisma.wallet.findUnique({
       where: { userId },
     });
 
     if (!wallet) {
-      throw new NotFoundException('Wallet not found');
+      // Auto-create wallet if missing (handles existing users)
+      wallet = await this.prisma.wallet.create({
+        data: { userId },
+      });
+      this.logger.log(`Auto-created wallet for user ${userId}`);
     }
 
     return wallet;
