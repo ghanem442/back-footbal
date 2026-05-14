@@ -1984,4 +1984,101 @@ export class AdminService {
       ...(r.owner ? { owner: r.owner } : {}),
     };
   }
+
+  /**
+   * Get payments pending verification (e.g., InstaPay with screenshot uploads)
+   * @param query - Query parameters for filtering and pagination
+   * @returns Paginated list of payments pending verification
+   */
+  async getPendingVerificationPayments(query: {
+    page?: number;
+    limit?: number;
+    paymentMethod?: string;
+  }) {
+    const page = query.page || 1;
+    const limit = query.limit || 20;
+    const skip = (page - 1) * limit;
+
+    // Build where clause
+    const where: any = {
+      status: 'PENDING',
+      // Filter for payments that have screenshot uploaded (manual verification needed)
+      gatewayResponse: {
+        path: ['screenshotUrl'],
+        not: Prisma.DbNull,
+      },
+    };
+
+    // Add payment method filter if provided
+    if (query.paymentMethod) {
+      where.gateway = query.paymentMethod;
+    }
+
+    // Get payments with related booking and user data
+    const [payments, total] = await Promise.all([
+      this.prisma.payment.findMany({
+        where,
+        include: {
+          booking: {
+            include: {
+              player: {
+                select: {
+                  id: true,
+                  email: true,
+                  name: true,
+                },
+              },
+              field: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip,
+        take: limit,
+      }),
+      this.prisma.payment.count({ where }),
+    ]);
+
+    // Format the response
+    const formattedPayments = payments.map((payment) => ({
+      id: payment.id,
+      bookingId: payment.bookingId,
+      gateway: payment.gateway,
+      amount: parseFloat(payment.amount.toString()),
+      currency: payment.currency,
+      status: payment.status,
+      transactionId: payment.transactionId,
+      screenshotUrl: (payment.gatewayResponse as any)?.screenshotUrl,
+      screenshotUploadedAt: (payment.gatewayResponse as any)?.screenshotUploadedAt,
+      createdAt: payment.createdAt,
+      updatedAt: payment.updatedAt,
+      booking: {
+        id: payment.booking.id,
+        bookingNumber: payment.booking.bookingNumber,
+        scheduledDate: payment.booking.scheduledDate,
+        startTime: payment.booking.startTime,
+        endTime: payment.booking.endTime,
+        status: payment.booking.status,
+        player: payment.booking.player,
+        field: payment.booking.field,
+      },
+    }));
+
+    return {
+      payments: formattedPayments,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
 }

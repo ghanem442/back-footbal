@@ -42,6 +42,7 @@ import {
   UpdateSettingsDto,
   PlatformWalletWithdrawDto,
   PayoutMethod,
+  PendingVerificationQueryDto,
 } from './dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '@common/guards/roles.guard';
@@ -807,6 +808,35 @@ export class AdminController {
       message: {
         en: 'Wallet transactions retrieved successfully',
         ar: 'تم استرجاع معاملات المحفظة بنجاح',
+      },
+    };
+  }
+
+  // ============================================
+  // PAYMENTS MANAGEMENT
+  // ============================================
+
+  @Get('payments/pending-verification')
+  @ApiOperation({
+    summary: 'Get payments pending verification',
+    description: 'Retrieve paginated list of payments that require manual verification (e.g., InstaPay with screenshot uploads)',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page' })
+  @ApiQuery({ name: 'paymentMethod', required: false, enum: ['STRIPE', 'FAWRY', 'VODAFONE_CASH', 'INSTAPAY', 'WALLET', 'PAYMOB'], description: 'Filter by payment method' })
+  async getPendingVerificationPayments(@Query() query: PendingVerificationQueryDto) {
+    const result = await this.adminService.getPendingVerificationPayments({
+      page: query.page,
+      limit: query.limit,
+      paymentMethod: query.paymentMethod,
+    });
+
+    return {
+      success: true,
+      data: result,
+      message: {
+        en: 'Pending verification payments retrieved successfully',
+        ar: 'تم استرجاع المدفوعات المعلقة للتحقق بنجاح',
       },
     };
   }

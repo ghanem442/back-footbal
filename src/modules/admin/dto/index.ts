@@ -15,3 +15,4 @@ export * from './update-field.dto';
 export * from './update-field-status.dto';
 export * from './update-settings.dto';
 export * from './platform-wallet-withdraw.dto';
+export * from './pending-verification-query.dto';
