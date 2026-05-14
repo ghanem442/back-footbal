@@ -615,6 +615,50 @@ export class PaymentController {
   }
 
   /**
+   * Get payment verification status
+   * GET /payments/:id/verification-status
+   */
+  @Get(':id/verification-status')
+  async getVerificationStatus(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id },
+      include: { booking: true },
+    });
+
+    if (!payment) throw new NotFoundException('Payment not found');
+    if (payment.booking.playerId !== user.userId && user.role !== 'ADMIN') {
+      throw new ForbiddenException('Cannot access another user\'s payment');
+    }
+
+    const gatewayResponse = payment.gatewayResponse as any;
+    const hasScreenshot = !!gatewayResponse?.screenshotUrl;
+    const screenshotUploadedAt = gatewayResponse?.screenshotUploadedAt;
+
+    return {
+      success: true,
+      data: {
+        paymentId: payment.id,
+        status: payment.status,
+        gateway: payment.gateway,
+        requiresScreenshot: payment.gateway === 'INSTAPAY',
+        hasScreenshot,
+        screenshotUrl: gatewayResponse?.screenshotUrl,
+        screenshotUploadedAt,
+        isVerified: payment.status === 'COMPLETED',
+        isPending: payment.status === 'PENDING',
+        isFailed: payment.status === 'FAILED',
+      },
+      message: {
+        en: 'Verification status retrieved successfully',
+        ar: 'تم استرجاع حالة التحقق بنجاح',
+      },
+    };
+  }
+
+  /**
    * Get payment details
    * GET /payments/:id
    */
