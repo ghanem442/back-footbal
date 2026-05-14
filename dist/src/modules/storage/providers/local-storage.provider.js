@@ -48,7 +48,6 @@ const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const fs = __importStar(require("fs/promises"));
 const path = __importStar(require("path"));
-const uuid_1 = require("uuid");
 let LocalStorageProvider = LocalStorageProvider_1 = class LocalStorageProvider {
     constructor(configService) {
         this.configService = configService;
@@ -58,12 +57,13 @@ let LocalStorageProvider = LocalStorageProvider_1 = class LocalStorageProvider {
     }
     async upload(file, filename, mimeType) {
         try {
-            await fs.mkdir(this.uploadDir, { recursive: true });
-            const ext = path.extname(filename);
-            const uniqueFilename = `${(0, uuid_1.v4)()}${ext}`;
-            const filePath = path.join(this.uploadDir, uniqueFilename);
+            const dirname = path.dirname(filename);
+            const basename = path.basename(filename);
+            const fullDirPath = path.join(this.uploadDir, dirname);
+            await fs.mkdir(fullDirPath, { recursive: true });
+            const filePath = path.join(this.uploadDir, filename);
             await fs.writeFile(filePath, file);
-            const url = `${this.baseUrl}/${uniqueFilename}`;
+            const url = `${this.baseUrl}/${filename}`;
             this.logger.log(`File uploaded to local storage: ${url}`);
             return url;
         }

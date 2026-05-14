@@ -39,19 +39,24 @@ export class LocalStorageProvider implements StorageProvider {
     mimeType: string,
   ): Promise<string> {
     try {
-      // Ensure upload directory exists
-      await fs.mkdir(this.uploadDir, { recursive: true });
+      // Extract directory path from filename (e.g., "payment-proof/file.jpg")
+      const dirname = path.dirname(filename);
+      const basename = path.basename(filename);
+      
+      // Create full directory path
+      const fullDirPath = path.join(this.uploadDir, dirname);
+      
+      // Ensure upload directory exists (including subdirectories)
+      await fs.mkdir(fullDirPath, { recursive: true });
 
-      // Generate unique filename to prevent collisions
-      const ext = path.extname(filename);
-      const uniqueFilename = `${uuidv4()}${ext}`;
-      const filePath = path.join(this.uploadDir, uniqueFilename);
+      // Full file path
+      const filePath = path.join(this.uploadDir, filename);
 
       // Write file to disk
       await fs.writeFile(filePath, file);
 
-      // Return public URL
-      const url = `${this.baseUrl}/${uniqueFilename}`;
+      // Return public URL (preserve directory structure)
+      const url = `${this.baseUrl}/${filename}`;
       this.logger.log(`File uploaded to local storage: ${url}`);
 
       return url;

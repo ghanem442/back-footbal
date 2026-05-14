@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { StorageService } from './storage.service';
+import { StorageController } from './storage.controller';
 import { LocalStorageProvider } from './providers/local-storage.provider';
 import { S3StorageProvider } from './providers/s3-storage.provider';
 import { CloudinaryStorageProvider } from './providers/cloudinary-storage.provider';
@@ -19,6 +20,7 @@ import { CloudinaryStorageProvider } from './providers/cloudinary-storage.provid
  */
 @Module({
   imports: [ConfigModule],
+  controllers: [StorageController],
   providers: [
     StorageService,
     LocalStorageProvider,

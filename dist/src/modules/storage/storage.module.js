@@ -10,6 +10,7 @@ exports.StorageModule = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const storage_service_1 = require("./storage.service");
+const storage_controller_1 = require("./storage.controller");
 const local_storage_provider_1 = require("./providers/local-storage.provider");
 const s3_storage_provider_1 = require("./providers/s3-storage.provider");
 const cloudinary_storage_provider_1 = require("./providers/cloudinary-storage.provider");
@@ -19,6 +20,7 @@ exports.StorageModule = StorageModule;
 exports.StorageModule = StorageModule = __decorate([
     (0, common_1.Module)({
         imports: [config_1.ConfigModule],
+        controllers: [storage_controller_1.StorageController],
         providers: [
             storage_service_1.StorageService,
             local_storage_provider_1.LocalStorageProvider,
