@@ -444,33 +444,6 @@ export class AdminController {
     };
   }
 
-  @Get('pending-payments')
-  @ApiOperation({
-    summary: 'Get all pending payment bookings',
-    description: 'Retrieve paginated list of bookings with PENDING_PAYMENT status',
-  })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({ name: 'fieldId', required: false, type: String })
-  @ApiQuery({ name: 'ownerId', required: false, type: String })
-  @ApiQuery({ name: 'search', required: false, type: String })
-  async getPendingPayments(@Query() query: ListBookingsQueryDto) {
-    // Force status to PENDING_PAYMENT
-    const result = await this.adminService.getBookings({
-      ...query,
-      status: 'PENDING_PAYMENT',
-    });
-
-    return {
-      success: true,
-      data: result,
-      message: {
-        en: 'Pending payments retrieved successfully',
-        ar: 'تم استرجاع المدفوعات المعلقة بنجاح',
-      },
-    };
-  }
-
   // ============================================
   // FIELDS MANAGEMENT
   // ============================================
