@@ -1,6 +1,7 @@
 import { Controller, Post, Body, Param, UseGuards, Request, Get, HttpCode, HttpStatus, Headers, RawBodyRequest, Req, BadRequestException, NotFoundException, ForbiddenException, Res } from '@nestjs/common';
 import { PaymentService } from '../services/payment.service';
 import { InitiatePaymentDto } from '../dto/initiate-payment.dto';
+import { UploadScreenshotDto } from '../dto/upload-screenshot.dto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BookingConfirmationService } from '../../bookings/booking-confirmation.service';
 import { Throttle } from '@nestjs/throttler';
@@ -580,7 +581,7 @@ export class PaymentController {
   @HttpCode(HttpStatus.OK)
   async uploadScreenshot(
     @Param('id') id: string,
-    @Body() body: { screenshotUrl: string },
+    @Body() dto: UploadScreenshotDto,
     @CurrentUser() user: JwtPayload,
   ) {
     const payment = await this.prisma.payment.findUnique({
@@ -592,24 +593,30 @@ export class PaymentController {
     if (payment.booking.playerId !== user.userId && user.role !== 'ADMIN') {
       throw new ForbiddenException('Cannot access another user\'s payment');
     }
-    if (!body.screenshotUrl) {
-      throw new BadRequestException('screenshotUrl is required');
-    }
 
     const updated = await this.prisma.payment.update({
       where: { id },
       data: {
         gatewayResponse: {
           ...(payment.gatewayResponse as any),
-          screenshotUrl: body.screenshotUrl,
+          screenshotUrl: dto.screenshotUrl,
           screenshotUploadedAt: new Date().toISOString(),
+          notes: dto.notes,
+          transactionId: dto.transactionId,
+          senderNumber: dto.senderNumber,
         },
       },
     });
 
     return {
       success: true,
-      data: { paymentId: updated.id, screenshotUrl: body.screenshotUrl },
+      data: { 
+        paymentId: updated.id, 
+        screenshotUrl: dto.screenshotUrl,
+        notes: dto.notes,
+        transactionId: dto.transactionId,
+        senderNumber: dto.senderNumber,
+      },
       message: 'Screenshot uploaded. Awaiting admin confirmation.',
     };
   }
