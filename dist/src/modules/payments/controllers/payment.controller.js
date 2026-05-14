@@ -16,6 +16,7 @@ exports.PaymentController = void 0;
 const common_1 = require("@nestjs/common");
 const payment_service_1 = require("../services/payment.service");
 const initiate_payment_dto_1 = require("../dto/initiate-payment.dto");
+const upload_screenshot_dto_1 = require("../dto/upload-screenshot.dto");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const booking_confirmation_service_1 = require("../../bookings/booking-confirmation.service");
 const throttler_1 = require("@nestjs/throttler");
@@ -413,7 +414,7 @@ let PaymentController = class PaymentController {
         await this.processWebhookResult(result, 'INSTAPAY');
         return { received: true };
     }
-    async uploadScreenshot(id, body, user) {
+    async uploadScreenshot(id, dto, user) {
         const payment = await this.prisma.payment.findUnique({
             where: { id },
             include: { booking: true },
@@ -423,23 +424,62 @@ let PaymentController = class PaymentController {
         if (payment.booking.playerId !== user.userId && user.role !== 'ADMIN') {
             throw new common_1.ForbiddenException('Cannot access another user\'s payment');
         }
-        if (!body.screenshotUrl) {
-            throw new common_1.BadRequestException('screenshotUrl is required');
-        }
         const updated = await this.prisma.payment.update({
             where: { id },
             data: {
                 gatewayResponse: {
                     ...payment.gatewayResponse,
-                    screenshotUrl: body.screenshotUrl,
+                    screenshotUrl: dto.screenshotUrl,
                     screenshotUploadedAt: new Date().toISOString(),
+                    notes: dto.notes,
+                    transactionId: dto.transactionId,
+                    senderNumber: dto.senderNumber,
                 },
             },
         });
         return {
             success: true,
-            data: { paymentId: updated.id, screenshotUrl: body.screenshotUrl },
+            data: {
+                paymentId: updated.id,
+                screenshotUrl: dto.screenshotUrl,
+                notes: dto.notes,
+                transactionId: dto.transactionId,
+                senderNumber: dto.senderNumber,
+            },
             message: 'Screenshot uploaded. Awaiting admin confirmation.',
+        };
+    }
+    async getVerificationStatus(id, user) {
+        const payment = await this.prisma.payment.findUnique({
+            where: { id },
+            include: { booking: true },
+        });
+        if (!payment)
+            throw new common_1.NotFoundException('Payment not found');
+        if (payment.booking.playerId !== user.userId && user.role !== 'ADMIN') {
+            throw new common_1.ForbiddenException('Cannot access another user\'s payment');
+        }
+        const gatewayResponse = payment.gatewayResponse;
+        const hasScreenshot = !!gatewayResponse?.screenshotUrl;
+        const screenshotUploadedAt = gatewayResponse?.screenshotUploadedAt;
+        return {
+            success: true,
+            data: {
+                paymentId: payment.id,
+                status: payment.status,
+                gateway: payment.gateway,
+                requiresScreenshot: payment.gateway === 'INSTAPAY',
+                hasScreenshot,
+                screenshotUrl: gatewayResponse?.screenshotUrl,
+                screenshotUploadedAt,
+                isVerified: payment.status === 'COMPLETED',
+                isPending: payment.status === 'PENDING',
+                isFailed: payment.status === 'FAILED',
+            },
+            message: {
+                en: 'Verification status retrieved successfully',
+                ar: 'تم استرجاع حالة التحقق بنجاح',
+            },
         };
     }
     async getPayment(id, user) {
@@ -623,9 +663,17 @@ __decorate([
     __param(1, (0, common_1.Body)()),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:paramtypes", [String, upload_screenshot_dto_1.UploadScreenshotDto, Object]),
     __metadata("design:returntype", Promise)
 ], PaymentController.prototype, "uploadScreenshot", null);
+__decorate([
+    (0, common_1.Get)(':id/verification-status'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], PaymentController.prototype, "getVerificationStatus", null);
 __decorate([
     (0, common_1.Get)(':id'),
     __param(0, (0, common_1.Param)('id')),

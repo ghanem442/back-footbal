@@ -8,7 +8,7 @@ export class UploadScreenshotDto {
   })
   @IsString()
   @IsNotEmpty()
-  screenshotUrl: string;
+  screenshotUrl!: string;
 
   @ApiPropertyOptional({
     description: 'Optional notes or comments about the payment',

@@ -1,6 +1,7 @@
 import { RawBodyRequest } from '@nestjs/common';
 import { PaymentService } from '../services/payment.service';
 import { InitiatePaymentDto } from '../dto/initiate-payment.dto';
+import { UploadScreenshotDto } from '../dto/upload-screenshot.dto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BookingConfirmationService } from '../../bookings/booking-confirmation.service';
 import { JwtPayload } from '@modules/auth/interfaces/jwt-payload.interface';
@@ -100,15 +101,35 @@ export declare class PaymentController {
     handleInstaPayWebhook(payload: any): Promise<{
         received: boolean;
     }>;
-    uploadScreenshot(id: string, body: {
-        screenshotUrl: string;
-    }, user: JwtPayload): Promise<{
+    uploadScreenshot(id: string, dto: UploadScreenshotDto, user: JwtPayload): Promise<{
         success: boolean;
         data: {
             paymentId: string;
             screenshotUrl: string;
+            notes: string | undefined;
+            transactionId: string | undefined;
+            senderNumber: string | undefined;
         };
         message: string;
+    }>;
+    getVerificationStatus(id: string, user: JwtPayload): Promise<{
+        success: boolean;
+        data: {
+            paymentId: string;
+            status: import(".prisma/client").$Enums.PaymentStatus;
+            gateway: import(".prisma/client").$Enums.PaymentGateway;
+            requiresScreenshot: boolean;
+            hasScreenshot: boolean;
+            screenshotUrl: any;
+            screenshotUploadedAt: any;
+            isVerified: boolean;
+            isPending: boolean;
+            isFailed: boolean;
+        };
+        message: {
+            en: string;
+            ar: string;
+        };
     }>;
     getPayment(id: string, user: JwtPayload): Promise<{
         success: boolean;

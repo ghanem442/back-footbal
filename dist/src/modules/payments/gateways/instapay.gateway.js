@@ -73,6 +73,19 @@ let InstaPayGateway = class InstaPayGateway extends base_payment_gateway_1.BaseP
     }
     async processPayment(request) {
         this.logPaymentOperation('processPayment', { bookingId: request.bookingId, amount: request.amount });
+        if (!this.merchantId || !this.apiKey || !this.secretKey) {
+            this.logger.warn('InstaPay not configured - returning mock PENDING response (requires screenshot upload)');
+            return {
+                transactionId: `IP-MOCK-${request.bookingId}-${Date.now()}`,
+                status: 'PENDING',
+                gatewayResponse: {
+                    mock: true,
+                    message: 'Please upload payment screenshot for manual verification',
+                    requiresScreenshot: true,
+                },
+                redirectUrl: undefined,
+            };
+        }
         try {
             const orderRef = `IP-${request.bookingId}-${Date.now()}`;
             const signature = this.generateSignature(orderRef, request.amount);
