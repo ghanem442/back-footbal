@@ -40,8 +40,8 @@ export class BookingConfirmationService {
    * 3. Calculate net amount after commission
    * 4. Credit field owner wallet
    * 5. Record commission in revenue tracking
-   * 6. Trigger QR code generation (placeholder)
-   * 7. Trigger notification sending (placeholder)
+   * 6. Trigger QR code generation (AFTER transaction)
+   * 7. Trigger notification sending (AFTER transaction)
    * 
    * @param bookingId - The booking ID to confirm
    * @param gateway - The payment gateway used
@@ -50,7 +50,8 @@ export class BookingConfirmationService {
   async confirmBooking(bookingId: string, gateway: PaymentGateway) {
     this.logger.log(`Starting booking confirmation for booking ${bookingId}`);
 
-    return this.prisma.$transaction(
+    // Execute critical database operations in transaction
+    const confirmedBooking = await this.prisma.$transaction(
       async (tx) => {
         // Get booking with all related data
         const booking = await tx.booking.findUnique({
@@ -169,79 +170,95 @@ export class BookingConfirmationService {
           `Recorded revenue for booking ${bookingId}: Deposit=${depositAmount}, Platform Commission=${commissionAmount}, Field Owner Wallet=${netAmount}`,
         );
 
-        // 6. Generate QR code for booking
-        try {
-          const qrCode = await this.qrService.generateQrCodeForBooking(bookingId);
-          this.logger.log(
-            `QR code generated for booking ${bookingId}: ${qrCode.imageUrl}`,
-          );
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          this.logger.error(
-            `Failed to generate QR code for booking ${bookingId}: ${errorMessage}`,
-          );
-          // Don't fail the entire transaction if QR generation fails
-          // The booking is still confirmed, QR can be regenerated later
-        }
-
-        // 7. Send confirmation notifications
-        try {
-          // Get player's preferred language
-          const player = await tx.user.findUnique({
-            where: { id: booking.player.id },
-            select: { preferredLanguage: true, email: true },
-          });
-
-          // Get field owner's preferred language
-          const fieldOwner = await tx.user.findUnique({
-            where: { id: booking.field.ownerId },
-            select: { preferredLanguage: true },
-          });
-
-          // Format date for notification
-          const formattedDate = new Date(booking.scheduledDate).toLocaleDateString();
-
-          // Send notification to player
-          await this.notificationsService.sendBookingConfirmationNotification(
-            booking.player.id,
-            booking.field.name,
-            formattedDate,
-            player?.preferredLanguage || 'en',
-          );
-
-          this.logger.log(
-            `Sent confirmation notification to player ${booking.player.id}`,
-          );
-
-          // Send notification to field owner
-          await this.notificationsService.sendNewBookingNotification(
-            booking.field.ownerId,
-            booking.field.name,
-            formattedDate,
-            player?.email || 'Player',
-            fieldOwner?.preferredLanguage || 'en',
-          );
-
-          this.logger.log(
-            `Sent new booking notification to field owner ${booking.field.ownerId}`,
-          );
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          this.logger.error(
-            `Failed to send confirmation notification for booking ${bookingId}: ${errorMessage}`,
-          );
-          // Don't fail the transaction if notification fails
-        }
-
-        this.logger.log(`Booking confirmation completed for ${bookingId}`);
-
         return confirmedBooking;
       },
       {
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        timeout: 15000, // 15 seconds
+        timeout: 10000, // Reduced to 10 seconds since QR generation is moved out
       },
     );
+
+    // 6. Generate QR code AFTER transaction (async, won't block transaction)
+    // This can take 15+ seconds with Cloudinary upload, so it's done outside transaction
+    this.qrService.generateQrCodeForBooking(bookingId)
+      .then((qrCode) => {
+        this.logger.log(
+          `QR code generated for booking ${bookingId}: ${qrCode.imageUrl}`,
+        );
+      })
+      .catch((error) => {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        this.logger.error(
+          `Failed to generate QR code for booking ${bookingId}: ${errorMessage}`,
+        );
+        // QR generation failure doesn't affect booking confirmation
+        // QR can be regenerated later if needed
+      });
+
+    // 7. Send confirmation notifications AFTER transaction (async)
+    this.sendConfirmationNotifications(bookingId, confirmedBooking)
+      .catch((error) => {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        this.logger.error(
+          `Failed to send confirmation notifications for booking ${bookingId}: ${errorMessage}`,
+        );
+        // Notification failure doesn't affect booking confirmation
+      });
+
+    this.logger.log(`Booking confirmation completed for ${bookingId}`);
+
+    return confirmedBooking;
+  }
+
+  /**
+   * Send confirmation notifications (extracted to separate method)
+   * This runs asynchronously after the transaction commits
+   */
+  private async sendConfirmationNotifications(bookingId: string, booking: any) {
+    try {
+      // Get player's preferred language
+      const player = await this.prisma.user.findUnique({
+        where: { id: booking.player.id },
+        select: { preferredLanguage: true, email: true },
+      });
+
+      // Get field owner's preferred language
+      const fieldOwner = await this.prisma.user.findUnique({
+        where: { id: booking.field.ownerId },
+        select: { preferredLanguage: true },
+      });
+
+      // Format date for notification
+      const formattedDate = new Date(booking.scheduledDate).toLocaleDateString();
+
+      // Send notification to player
+      await this.notificationsService.sendBookingConfirmationNotification(
+        booking.player.id,
+        booking.field.name,
+        formattedDate,
+        player?.preferredLanguage || 'en',
+      );
+
+      this.logger.log(
+        `Sent confirmation notification to player ${booking.player.id}`,
+      );
+
+      // Send notification to field owner
+      await this.notificationsService.sendNewBookingNotification(
+        booking.field.ownerId,
+        booking.field.name,
+        formattedDate,
+        player?.email || 'Player',
+        fieldOwner?.preferredLanguage || 'en',
+      );
+
+      this.logger.log(
+        `Sent new booking notification to field owner ${booking.field.ownerId}`,
+      );
+    } catch (error) {
+      // Re-throw to be caught by caller
+      throw error;
+    }
   }
 
   /**

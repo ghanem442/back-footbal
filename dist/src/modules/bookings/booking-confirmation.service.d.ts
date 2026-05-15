@@ -69,6 +69,7 @@ export declare class BookingConfirmationService {
         cancelledBy: string | null;
         refundAmount: Prisma.Decimal | null;
     }>;
+    private sendConfirmationNotifications;
     handlePaymentFailure(bookingId: string, failureReason?: string): Promise<{
         field: {
             id: string;

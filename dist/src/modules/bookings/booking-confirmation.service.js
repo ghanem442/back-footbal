@@ -29,7 +29,7 @@ let BookingConfirmationService = BookingConfirmationService_1 = class BookingCon
     }
     async confirmBooking(bookingId, gateway) {
         this.logger.log(`Starting booking confirmation for booking ${bookingId}`);
-        return this.prisma.$transaction(async (tx) => {
+        const confirmedBooking = await this.prisma.$transaction(async (tx) => {
             const booking = await tx.booking.findUnique({
                 where: { id: bookingId },
                 include: {
@@ -109,39 +109,46 @@ let BookingConfirmationService = BookingConfirmationService_1 = class BookingCon
                 },
             });
             this.logger.log(`Recorded revenue for booking ${bookingId}: Deposit=${depositAmount}, Platform Commission=${commissionAmount}, Field Owner Wallet=${netAmount}`);
-            try {
-                const qrCode = await this.qrService.generateQrCodeForBooking(bookingId);
-                this.logger.log(`QR code generated for booking ${bookingId}: ${qrCode.imageUrl}`);
-            }
-            catch (error) {
-                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                this.logger.error(`Failed to generate QR code for booking ${bookingId}: ${errorMessage}`);
-            }
-            try {
-                const player = await tx.user.findUnique({
-                    where: { id: booking.player.id },
-                    select: { preferredLanguage: true, email: true },
-                });
-                const fieldOwner = await tx.user.findUnique({
-                    where: { id: booking.field.ownerId },
-                    select: { preferredLanguage: true },
-                });
-                const formattedDate = new Date(booking.scheduledDate).toLocaleDateString();
-                await this.notificationsService.sendBookingConfirmationNotification(booking.player.id, booking.field.name, formattedDate, player?.preferredLanguage || 'en');
-                this.logger.log(`Sent confirmation notification to player ${booking.player.id}`);
-                await this.notificationsService.sendNewBookingNotification(booking.field.ownerId, booking.field.name, formattedDate, player?.email || 'Player', fieldOwner?.preferredLanguage || 'en');
-                this.logger.log(`Sent new booking notification to field owner ${booking.field.ownerId}`);
-            }
-            catch (error) {
-                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                this.logger.error(`Failed to send confirmation notification for booking ${bookingId}: ${errorMessage}`);
-            }
-            this.logger.log(`Booking confirmation completed for ${bookingId}`);
             return confirmedBooking;
         }, {
             isolationLevel: client_1.Prisma.TransactionIsolationLevel.Serializable,
-            timeout: 15000,
+            timeout: 10000,
         });
+        this.qrService.generateQrCodeForBooking(bookingId)
+            .then((qrCode) => {
+            this.logger.log(`QR code generated for booking ${bookingId}: ${qrCode.imageUrl}`);
+        })
+            .catch((error) => {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            this.logger.error(`Failed to generate QR code for booking ${bookingId}: ${errorMessage}`);
+        });
+        this.sendConfirmationNotifications(bookingId, confirmedBooking)
+            .catch((error) => {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            this.logger.error(`Failed to send confirmation notifications for booking ${bookingId}: ${errorMessage}`);
+        });
+        this.logger.log(`Booking confirmation completed for ${bookingId}`);
+        return confirmedBooking;
+    }
+    async sendConfirmationNotifications(bookingId, booking) {
+        try {
+            const player = await this.prisma.user.findUnique({
+                where: { id: booking.player.id },
+                select: { preferredLanguage: true, email: true },
+            });
+            const fieldOwner = await this.prisma.user.findUnique({
+                where: { id: booking.field.ownerId },
+                select: { preferredLanguage: true },
+            });
+            const formattedDate = new Date(booking.scheduledDate).toLocaleDateString();
+            await this.notificationsService.sendBookingConfirmationNotification(booking.player.id, booking.field.name, formattedDate, player?.preferredLanguage || 'en');
+            this.logger.log(`Sent confirmation notification to player ${booking.player.id}`);
+            await this.notificationsService.sendNewBookingNotification(booking.field.ownerId, booking.field.name, formattedDate, player?.email || 'Player', fieldOwner?.preferredLanguage || 'en');
+            this.logger.log(`Sent new booking notification to field owner ${booking.field.ownerId}`);
+        }
+        catch (error) {
+            throw error;
+        }
     }
     async handlePaymentFailure(bookingId, failureReason) {
         this.logger.log(`Handling payment failure for booking ${bookingId}`);
