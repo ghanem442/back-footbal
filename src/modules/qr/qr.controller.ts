@@ -1,7 +1,9 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
+  Param,
   UseGuards,
   BadRequestException,
   NotFoundException,
@@ -12,6 +14,7 @@ import {
   ApiOperation,
   ApiResponse,
   ApiBody,
+  ApiParam,
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { QrService } from './qr.service';
@@ -34,6 +37,104 @@ export class QrController {
     private readonly qrService: QrService,
     private readonly prisma: PrismaService,
   ) {}
+
+  @Get('booking/:bookingId')
+  @Roles(Role.PLAYER)
+  @ApiOperation({
+    summary: 'Get QR code for a booking',
+    description: 'Players can retrieve the QR code for their confirmed booking',
+  })
+  @ApiParam({ name: 'bookingId', type: String, description: 'Booking ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'QR code retrieved successfully',
+    schema: {
+      example: {
+        success: true,
+        data: {
+          qrToken: 'qr_abc123xyz',
+          qrImageUrl: 'https://example.com/qr/abc123.png',
+          isUsed: false,
+          bookingId: 'bk_123abc',
+          booking: {
+            id: 'bk_123abc',
+            bookingNumber: 'BK-2024-001',
+            status: 'CONFIRMED',
+            scheduledDate: '2024-01-15',
+            scheduledStartTime: '14:00:00',
+            scheduledEndTime: '16:00:00',
+            field: {
+              name: 'Champions Field',
+              address: '123 Sports St',
+            },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Can only access own bookings',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Booking or QR code not found',
+  })
+  async getQrCode(
+    @Param('bookingId') bookingId: string,
+    @CurrentUser() user: any,
+  ) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        qrCode: true,
+        field: {
+          select: {
+            id: true,
+            name: true,
+            address: true,
+          },
+        },
+      },
+    });
+
+    if (!booking) {
+      throw new NotFoundException('Booking not found');
+    }
+
+    // Ensure the player can only access their own booking's QR
+    if (booking.playerId !== user.userId) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    if (!booking.qrCode) {
+      throw new NotFoundException('QR code not found for this booking');
+    }
+
+    return {
+      success: true,
+      data: {
+        qrToken: booking.qrCode.qrToken,
+        qrImageUrl: booking.qrCode.imageUrl,
+        isUsed: booking.qrCode.isUsed,
+        usedAt: booking.qrCode.usedAt,
+        bookingId: booking.id,
+        booking: {
+          id: booking.id,
+          bookingNumber: booking.bookingNumber,
+          status: booking.status,
+          scheduledDate: booking.scheduledDate,
+          scheduledStartTime: booking.scheduledStartTime,
+          scheduledEndTime: booking.scheduledEndTime,
+          field: booking.field,
+        },
+      },
+      message: {
+        en: 'QR code retrieved successfully',
+        ar: 'تم استرجاع رمز الاستجابة السريعة بنجاح',
+      },
+    };
+  }
 
   @Post('validate')
   @Roles(Role.FIELD_OWNER)

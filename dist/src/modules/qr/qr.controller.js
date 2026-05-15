@@ -30,6 +30,53 @@ let QrController = class QrController {
         this.qrService = qrService;
         this.prisma = prisma;
     }
+    async getQrCode(bookingId, user) {
+        const booking = await this.prisma.booking.findUnique({
+            where: { id: bookingId },
+            include: {
+                qrCode: true,
+                field: {
+                    select: {
+                        id: true,
+                        name: true,
+                        address: true,
+                    },
+                },
+            },
+        });
+        if (!booking) {
+            throw new common_1.NotFoundException('Booking not found');
+        }
+        if (booking.playerId !== user.userId) {
+            throw new common_1.ForbiddenException('Access denied');
+        }
+        if (!booking.qrCode) {
+            throw new common_1.NotFoundException('QR code not found for this booking');
+        }
+        return {
+            success: true,
+            data: {
+                qrToken: booking.qrCode.qrToken,
+                qrImageUrl: booking.qrCode.imageUrl,
+                isUsed: booking.qrCode.isUsed,
+                usedAt: booking.qrCode.usedAt,
+                bookingId: booking.id,
+                booking: {
+                    id: booking.id,
+                    bookingNumber: booking.bookingNumber,
+                    status: booking.status,
+                    scheduledDate: booking.scheduledDate,
+                    scheduledStartTime: booking.scheduledStartTime,
+                    scheduledEndTime: booking.scheduledEndTime,
+                    field: booking.field,
+                },
+            },
+            message: {
+                en: 'QR code retrieved successfully',
+                ar: 'تم استرجاع رمز الاستجابة السريعة بنجاح',
+            },
+        };
+    }
     async validateQrCode(validateQrDto, user) {
         const { qrToken } = validateQrDto;
         const qrCode = await this.qrService.getQrCodeByToken(qrToken);
@@ -131,6 +178,55 @@ let QrController = class QrController {
     }
 };
 exports.QrController = QrController;
+__decorate([
+    (0, common_1.Get)('booking/:bookingId'),
+    (0, roles_decorator_1.Roles)(client_1.Role.PLAYER),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get QR code for a booking',
+        description: 'Players can retrieve the QR code for their confirmed booking',
+    }),
+    (0, swagger_1.ApiParam)({ name: 'bookingId', type: String, description: 'Booking ID' }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'QR code retrieved successfully',
+        schema: {
+            example: {
+                success: true,
+                data: {
+                    qrToken: 'qr_abc123xyz',
+                    qrImageUrl: 'https://example.com/qr/abc123.png',
+                    isUsed: false,
+                    bookingId: 'bk_123abc',
+                    booking: {
+                        id: 'bk_123abc',
+                        bookingNumber: 'BK-2024-001',
+                        status: 'CONFIRMED',
+                        scheduledDate: '2024-01-15',
+                        scheduledStartTime: '14:00:00',
+                        scheduledEndTime: '16:00:00',
+                        field: {
+                            name: 'Champions Field',
+                            address: '123 Sports St',
+                        },
+                    },
+                },
+            },
+        },
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 403,
+        description: 'Forbidden - Can only access own bookings',
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 404,
+        description: 'Booking or QR code not found',
+    }),
+    __param(0, (0, common_1.Param)('bookingId')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], QrController.prototype, "getQrCode", null);
 __decorate([
     (0, common_1.Post)('validate'),
     (0, roles_decorator_1.Roles)(client_1.Role.FIELD_OWNER),
