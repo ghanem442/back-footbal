@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Prisma, WalletTransactionType } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PlatformWalletService } from '@modules/platform-wallet/platform-wallet.service';
+import { BookingConfirmationService } from '@modules/bookings/booking-confirmation.service';
 
 @Injectable()
 export class AdminService {
@@ -18,6 +19,7 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly platformWalletService: PlatformWalletService,
+    private readonly bookingConfirmationService: BookingConfirmationService,
   ) {}
 
   /**
@@ -2084,6 +2086,198 @@ export class AdminService {
         limit,
         total,
         totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Approve a payment (admin confirms manual payment like InstaPay/Vodafone Cash)
+   * @param paymentId - Payment ID
+   * @param adminId - Admin user ID
+   * @param adminNotes - Optional admin notes
+   * @returns Updated payment and confirmed booking
+   */
+  async approvePayment(paymentId: string, adminId: string, adminNotes?: string) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        booking: {
+          include: {
+            player: true,
+            field: {
+              include: {
+                owner: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    if (payment.status === 'COMPLETED') {
+      this.logger.warn(`Payment ${paymentId} already approved`);
+      return {
+        payment: {
+          id: payment.id,
+          status: payment.status,
+          bookingId: payment.bookingId,
+        },
+        booking: {
+          id: payment.booking.id,
+          status: payment.booking.status,
+        },
+      };
+    }
+
+    if (payment.status !== 'PENDING') {
+      throw new BadRequestException(
+        `Cannot approve payment with status ${payment.status}. Only PENDING payments can be approved.`,
+      );
+    }
+
+    // Update payment status and add admin notes
+    const updatedPayment = await this.prisma.payment.update({
+      where: { id: paymentId },
+      data: {
+        status: 'COMPLETED',
+        gatewayResponse: {
+          ...(payment.gatewayResponse as any),
+          adminApproval: {
+            approvedBy: adminId,
+            approvedAt: new Date().toISOString(),
+            adminNotes,
+          },
+        },
+      },
+    });
+
+    // Confirm the booking if it's still PENDING_PAYMENT
+    if (payment.booking.status === 'PENDING_PAYMENT') {
+      await this.bookingConfirmationService.confirmBooking(
+        payment.bookingId,
+        payment.gateway,
+      );
+    }
+
+    // Fetch updated booking status
+    const confirmedBooking = await this.prisma.booking.findUniqueOrThrow({
+      where: { id: payment.bookingId },
+    });
+
+    this.logger.log(
+      `Payment ${paymentId} approved by admin ${adminId}. Booking ${payment.bookingId} confirmed.`,
+    );
+
+    return {
+      payment: {
+        id: updatedPayment.id,
+        status: updatedPayment.status,
+        bookingId: updatedPayment.bookingId,
+        gateway: updatedPayment.gateway,
+        amount: parseFloat(updatedPayment.amount.toString()),
+      },
+      booking: {
+        id: confirmedBooking.id,
+        bookingNumber: confirmedBooking.bookingNumber,
+        status: confirmedBooking.status,
+      },
+    };
+  }
+
+  /**
+   * Reject a payment (admin rejects manual payment due to invalid screenshot, fraud, etc.)
+   * @param paymentId - Payment ID
+   * @param adminId - Admin user ID
+   * @param reason - Rejection reason
+   * @returns Updated payment and cancelled booking
+   */
+  async rejectPayment(paymentId: string, adminId: string, reason: string) {
+    if (!reason || reason.trim().length === 0) {
+      throw new BadRequestException('Rejection reason is required');
+    }
+
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        booking: true,
+      },
+    });
+
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    if (payment.status === 'FAILED') {
+      this.logger.warn(`Payment ${paymentId} already rejected`);
+      return {
+        payment: {
+          id: payment.id,
+          status: payment.status,
+          bookingId: payment.bookingId,
+        },
+        booking: {
+          id: payment.booking.id,
+          status: payment.booking.status,
+        },
+      };
+    }
+
+    if (payment.status !== 'PENDING') {
+      throw new BadRequestException(
+        `Cannot reject payment with status ${payment.status}. Only PENDING payments can be rejected.`,
+      );
+    }
+
+    // Update payment status and add rejection reason
+    const updatedPayment = await this.prisma.payment.update({
+      where: { id: paymentId },
+      data: {
+        status: 'FAILED',
+        gatewayResponse: {
+          ...(payment.gatewayResponse as any),
+          adminRejection: {
+            rejectedBy: adminId,
+            rejectedAt: new Date().toISOString(),
+            reason,
+          },
+        },
+      },
+    });
+
+    // Cancel the booking if it's still PENDING_PAYMENT
+    let updatedBooking = payment.booking;
+    if (payment.booking.status === 'PENDING_PAYMENT') {
+      await this.bookingConfirmationService.handlePaymentFailure(
+        payment.bookingId,
+        `Payment rejected by admin: ${reason}`,
+      );
+
+      updatedBooking = await this.prisma.booking.findUniqueOrThrow({
+        where: { id: payment.bookingId },
+      });
+    }
+
+    this.logger.log(
+      `Payment ${paymentId} rejected by admin ${adminId}. Reason: ${reason}`,
+    );
+
+    return {
+      payment: {
+        id: updatedPayment.id,
+        status: updatedPayment.status,
+        bookingId: updatedPayment.bookingId,
+        gateway: updatedPayment.gateway,
+        amount: parseFloat(updatedPayment.amount.toString()),
+        rejectionReason: reason,
+      },
+      booking: {
+        id: updatedBooking.id,
+        bookingNumber: updatedBooking.bookingNumber,
+        status: updatedBooking.status,
       },
     };
   }

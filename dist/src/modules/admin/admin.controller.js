@@ -399,6 +399,28 @@ let AdminController = AdminController_1 = class AdminController {
             },
         };
     }
+    async approvePayment(paymentId, adminId, body) {
+        const result = await this.adminService.approvePayment(paymentId, adminId, body.adminNotes);
+        return {
+            success: true,
+            data: result,
+            message: {
+                en: 'Payment approved successfully',
+                ar: 'تمت الموافقة على الدفع بنجاح',
+            },
+        };
+    }
+    async rejectPayment(paymentId, adminId, body) {
+        const result = await this.adminService.rejectPayment(paymentId, adminId, body.reason);
+        return {
+            success: true,
+            data: result,
+            message: {
+                en: 'Payment rejected successfully',
+                ar: 'تم رفض الدفع بنجاح',
+            },
+        };
+    }
 };
 exports.AdminController = AdminController;
 __decorate([
@@ -842,6 +864,36 @@ __decorate([
     __metadata("design:paramtypes", [dto_1.PendingVerificationQueryDto]),
     __metadata("design:returntype", Promise)
 ], AdminController.prototype, "getPendingVerificationPayments", null);
+__decorate([
+    (0, common_1.Post)('payments/:paymentId/approve'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Approve a payment',
+        description: 'Approve a pending payment (e.g., after verifying screenshot for InstaPay/Vodafone Cash)',
+    }),
+    (0, swagger_1.ApiParam)({ name: 'paymentId', type: String, description: 'Payment ID' }),
+    __param(0, (0, common_1.Param)('paymentId')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)('userId')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", Promise)
+], AdminController.prototype, "approvePayment", null);
+__decorate([
+    (0, common_1.Post)('payments/:paymentId/reject'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Reject a payment',
+        description: 'Reject a pending payment (e.g., invalid screenshot or fraudulent payment)',
+    }),
+    (0, swagger_1.ApiParam)({ name: 'paymentId', type: String, description: 'Payment ID' }),
+    __param(0, (0, common_1.Param)('paymentId')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)('userId')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", Promise)
+], AdminController.prototype, "rejectPayment", null);
 exports.AdminController = AdminController = AdminController_1 = __decorate([
     (0, swagger_1.ApiTags)('Admin'),
     (0, common_1.Controller)('admin'),

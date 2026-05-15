@@ -676,4 +676,78 @@ export declare class AdminController {
             ar: string;
         };
     }>;
+    approvePayment(paymentId: string, adminId: string, body: {
+        adminNotes?: string;
+    }): Promise<{
+        success: boolean;
+        data: {
+            payment: {
+                id: string;
+                status: "COMPLETED";
+                bookingId: string;
+                gateway?: undefined;
+                amount?: undefined;
+            };
+            booking: {
+                id: string;
+                status: import(".prisma/client").$Enums.BookingStatus;
+                bookingNumber?: undefined;
+            };
+        } | {
+            payment: {
+                id: string;
+                status: import(".prisma/client").$Enums.PaymentStatus;
+                bookingId: string;
+                gateway: import(".prisma/client").$Enums.PaymentGateway;
+                amount: number;
+            };
+            booking: {
+                id: string;
+                bookingNumber: string | null;
+                status: import(".prisma/client").$Enums.BookingStatus;
+            };
+        };
+        message: {
+            en: string;
+            ar: string;
+        };
+    }>;
+    rejectPayment(paymentId: string, adminId: string, body: {
+        reason: string;
+    }): Promise<{
+        success: boolean;
+        data: {
+            payment: {
+                id: string;
+                status: "FAILED";
+                bookingId: string;
+                gateway?: undefined;
+                amount?: undefined;
+                rejectionReason?: undefined;
+            };
+            booking: {
+                id: string;
+                status: import(".prisma/client").$Enums.BookingStatus;
+                bookingNumber?: undefined;
+            };
+        } | {
+            payment: {
+                id: string;
+                status: import(".prisma/client").$Enums.PaymentStatus;
+                bookingId: string;
+                gateway: import(".prisma/client").$Enums.PaymentGateway;
+                amount: number;
+                rejectionReason: string;
+            };
+            booking: {
+                id: string;
+                bookingNumber: string | null;
+                status: import(".prisma/client").$Enums.BookingStatus;
+            };
+        };
+        message: {
+            en: string;
+            ar: string;
+        };
+    }>;
 }

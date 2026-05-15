@@ -1,13 +1,15 @@
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { PlatformWalletService } from '@modules/platform-wallet/platform-wallet.service';
+import { BookingConfirmationService } from '@modules/bookings/booking-confirmation.service';
 export declare class AdminService {
     private readonly prisma;
     private readonly platformWalletService;
+    private readonly bookingConfirmationService;
     private readonly logger;
     private readonly GLOBAL_COMMISSION_KEY;
     private readonly DEFAULT_COMMISSION_RATE;
-    constructor(prisma: PrismaService, platformWalletService: PlatformWalletService);
+    constructor(prisma: PrismaService, platformWalletService: PlatformWalletService, bookingConfirmationService: BookingConfirmationService);
     getGlobalCommissionRate(): Promise<number>;
     updateGlobalCommissionRate(commissionRate: number): Promise<number>;
     updateFieldCommissionRate(fieldId: string, commissionRate: number | null): Promise<{
@@ -515,6 +517,62 @@ export declare class AdminService {
             limit: number;
             total: number;
             totalPages: number;
+        };
+    }>;
+    approvePayment(paymentId: string, adminId: string, adminNotes?: string): Promise<{
+        payment: {
+            id: string;
+            status: "COMPLETED";
+            bookingId: string;
+            gateway?: undefined;
+            amount?: undefined;
+        };
+        booking: {
+            id: string;
+            status: import(".prisma/client").$Enums.BookingStatus;
+            bookingNumber?: undefined;
+        };
+    } | {
+        payment: {
+            id: string;
+            status: import(".prisma/client").$Enums.PaymentStatus;
+            bookingId: string;
+            gateway: import(".prisma/client").$Enums.PaymentGateway;
+            amount: number;
+        };
+        booking: {
+            id: string;
+            bookingNumber: string | null;
+            status: import(".prisma/client").$Enums.BookingStatus;
+        };
+    }>;
+    rejectPayment(paymentId: string, adminId: string, reason: string): Promise<{
+        payment: {
+            id: string;
+            status: "FAILED";
+            bookingId: string;
+            gateway?: undefined;
+            amount?: undefined;
+            rejectionReason?: undefined;
+        };
+        booking: {
+            id: string;
+            status: import(".prisma/client").$Enums.BookingStatus;
+            bookingNumber?: undefined;
+        };
+    } | {
+        payment: {
+            id: string;
+            status: import(".prisma/client").$Enums.PaymentStatus;
+            bookingId: string;
+            gateway: import(".prisma/client").$Enums.PaymentGateway;
+            amount: number;
+            rejectionReason: string;
+        };
+        booking: {
+            id: string;
+            bookingNumber: string | null;
+            status: import(".prisma/client").$Enums.BookingStatus;
         };
     }>;
 }

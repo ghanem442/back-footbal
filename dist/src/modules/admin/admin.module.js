@@ -12,12 +12,13 @@ const admin_controller_1 = require("./admin.controller");
 const admin_service_1 = require("./admin.service");
 const prisma_module_1 = require("../prisma/prisma.module");
 const platform_wallet_module_1 = require("../platform-wallet/platform-wallet.module");
+const bookings_module_1 = require("../bookings/bookings.module");
 let AdminModule = class AdminModule {
 };
 exports.AdminModule = AdminModule;
 exports.AdminModule = AdminModule = __decorate([
     (0, common_1.Module)({
-        imports: [prisma_module_1.PrismaModule, platform_wallet_module_1.PlatformWalletModule],
+        imports: [prisma_module_1.PrismaModule, platform_wallet_module_1.PlatformWalletModule, bookings_module_1.BookingsModule],
         controllers: [admin_controller_1.AdminController],
         providers: [admin_service_1.AdminService],
         exports: [admin_service_1.AdminService],

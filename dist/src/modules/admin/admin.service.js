@@ -16,10 +16,12 @@ const prisma_service_1 = require("../prisma/prisma.service");
 const client_1 = require("@prisma/client");
 const library_1 = require("@prisma/client/runtime/library");
 const platform_wallet_service_1 = require("../platform-wallet/platform-wallet.service");
+const booking_confirmation_service_1 = require("../bookings/booking-confirmation.service");
 let AdminService = AdminService_1 = class AdminService {
-    constructor(prisma, platformWalletService) {
+    constructor(prisma, platformWalletService, bookingConfirmationService) {
         this.prisma = prisma;
         this.platformWalletService = platformWalletService;
+        this.bookingConfirmationService = bookingConfirmationService;
         this.logger = new common_1.Logger(AdminService_1.name);
         this.GLOBAL_COMMISSION_KEY = 'global_commission_rate';
         this.DEFAULT_COMMISSION_RATE = 10;
@@ -1548,11 +1550,152 @@ let AdminService = AdminService_1 = class AdminService {
             },
         };
     }
+    async approvePayment(paymentId, adminId, adminNotes) {
+        const payment = await this.prisma.payment.findUnique({
+            where: { id: paymentId },
+            include: {
+                booking: {
+                    include: {
+                        player: true,
+                        field: {
+                            include: {
+                                owner: true,
+                            },
+                        },
+                    },
+                },
+            },
+        });
+        if (!payment) {
+            throw new common_1.NotFoundException('Payment not found');
+        }
+        if (payment.status === 'COMPLETED') {
+            this.logger.warn(`Payment ${paymentId} already approved`);
+            return {
+                payment: {
+                    id: payment.id,
+                    status: payment.status,
+                    bookingId: payment.bookingId,
+                },
+                booking: {
+                    id: payment.booking.id,
+                    status: payment.booking.status,
+                },
+            };
+        }
+        if (payment.status !== 'PENDING') {
+            throw new common_1.BadRequestException(`Cannot approve payment with status ${payment.status}. Only PENDING payments can be approved.`);
+        }
+        const updatedPayment = await this.prisma.payment.update({
+            where: { id: paymentId },
+            data: {
+                status: 'COMPLETED',
+                gatewayResponse: {
+                    ...payment.gatewayResponse,
+                    adminApproval: {
+                        approvedBy: adminId,
+                        approvedAt: new Date().toISOString(),
+                        adminNotes,
+                    },
+                },
+            },
+        });
+        if (payment.booking.status === 'PENDING_PAYMENT') {
+            await this.bookingConfirmationService.confirmBooking(payment.bookingId, payment.gateway);
+        }
+        const confirmedBooking = await this.prisma.booking.findUniqueOrThrow({
+            where: { id: payment.bookingId },
+        });
+        this.logger.log(`Payment ${paymentId} approved by admin ${adminId}. Booking ${payment.bookingId} confirmed.`);
+        return {
+            payment: {
+                id: updatedPayment.id,
+                status: updatedPayment.status,
+                bookingId: updatedPayment.bookingId,
+                gateway: updatedPayment.gateway,
+                amount: parseFloat(updatedPayment.amount.toString()),
+            },
+            booking: {
+                id: confirmedBooking.id,
+                bookingNumber: confirmedBooking.bookingNumber,
+                status: confirmedBooking.status,
+            },
+        };
+    }
+    async rejectPayment(paymentId, adminId, reason) {
+        if (!reason || reason.trim().length === 0) {
+            throw new common_1.BadRequestException('Rejection reason is required');
+        }
+        const payment = await this.prisma.payment.findUnique({
+            where: { id: paymentId },
+            include: {
+                booking: true,
+            },
+        });
+        if (!payment) {
+            throw new common_1.NotFoundException('Payment not found');
+        }
+        if (payment.status === 'FAILED') {
+            this.logger.warn(`Payment ${paymentId} already rejected`);
+            return {
+                payment: {
+                    id: payment.id,
+                    status: payment.status,
+                    bookingId: payment.bookingId,
+                },
+                booking: {
+                    id: payment.booking.id,
+                    status: payment.booking.status,
+                },
+            };
+        }
+        if (payment.status !== 'PENDING') {
+            throw new common_1.BadRequestException(`Cannot reject payment with status ${payment.status}. Only PENDING payments can be rejected.`);
+        }
+        const updatedPayment = await this.prisma.payment.update({
+            where: { id: paymentId },
+            data: {
+                status: 'FAILED',
+                gatewayResponse: {
+                    ...payment.gatewayResponse,
+                    adminRejection: {
+                        rejectedBy: adminId,
+                        rejectedAt: new Date().toISOString(),
+                        reason,
+                    },
+                },
+            },
+        });
+        let updatedBooking = payment.booking;
+        if (payment.booking.status === 'PENDING_PAYMENT') {
+            await this.bookingConfirmationService.handlePaymentFailure(payment.bookingId, `Payment rejected by admin: ${reason}`);
+            updatedBooking = await this.prisma.booking.findUniqueOrThrow({
+                where: { id: payment.bookingId },
+            });
+        }
+        this.logger.log(`Payment ${paymentId} rejected by admin ${adminId}. Reason: ${reason}`);
+        return {
+            payment: {
+                id: updatedPayment.id,
+                status: updatedPayment.status,
+                bookingId: updatedPayment.bookingId,
+                gateway: updatedPayment.gateway,
+                amount: parseFloat(updatedPayment.amount.toString()),
+                rejectionReason: reason,
+            },
+            booking: {
+                id: updatedBooking.id,
+                bookingNumber: updatedBooking.bookingNumber,
+                status: updatedBooking.status,
+            },
+        };
+    }
 };
 exports.AdminService = AdminService;
 exports.AdminService = AdminService = AdminService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        platform_wallet_service_1.PlatformWalletService])
+        platform_wallet_service_1.PlatformWalletService,
+        booking_confirmation_service_1.BookingConfirmationService])
 ], AdminService);
 //# sourceMappingURL=admin.service.js.map

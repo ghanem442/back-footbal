@@ -840,4 +840,52 @@ export class AdminController {
       },
     };
   }
+
+  @Post('payments/:paymentId/approve')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Approve a payment',
+    description: 'Approve a pending payment (e.g., after verifying screenshot for InstaPay/Vodafone Cash)',
+  })
+  @ApiParam({ name: 'paymentId', type: String, description: 'Payment ID' })
+  async approvePayment(
+    @Param('paymentId') paymentId: string,
+    @CurrentUser('userId') adminId: string,
+    @Body() body: { adminNotes?: string },
+  ) {
+    const result = await this.adminService.approvePayment(paymentId, adminId, body.adminNotes);
+
+    return {
+      success: true,
+      data: result,
+      message: {
+        en: 'Payment approved successfully',
+        ar: 'تمت الموافقة على الدفع بنجاح',
+      },
+    };
+  }
+
+  @Post('payments/:paymentId/reject')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Reject a payment',
+    description: 'Reject a pending payment (e.g., invalid screenshot or fraudulent payment)',
+  })
+  @ApiParam({ name: 'paymentId', type: String, description: 'Payment ID' })
+  async rejectPayment(
+    @Param('paymentId') paymentId: string,
+    @CurrentUser('userId') adminId: string,
+    @Body() body: { reason: string },
+  ) {
+    const result = await this.adminService.rejectPayment(paymentId, adminId, body.reason);
+
+    return {
+      success: true,
+      data: result,
+      message: {
+        en: 'Payment rejected successfully',
+        ar: 'تم رفض الدفع بنجاح',
+      },
+    };
+  }
 }
