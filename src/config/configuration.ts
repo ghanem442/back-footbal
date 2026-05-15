@@ -4,6 +4,7 @@ export default () => ({
     port: parseInt(process.env.PORT || '3000', 10),
     name: process.env.APP_NAME || 'Football Field Booking API',
     frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
+    backendUrl: process.env.BACKEND_URL || process.env.APP_URL || 'http://localhost:3000',
   },
   database: {
     url: process.env.DATABASE_URL,

@@ -4,6 +4,7 @@ declare const _default: () => {
         port: number;
         name: string;
         frontendUrl: string;
+        backendUrl: string;
     };
     database: {
         url: string | undefined;
