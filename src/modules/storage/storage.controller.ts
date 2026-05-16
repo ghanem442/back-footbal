@@ -223,10 +223,25 @@ export class StorageController {
     }
 
     try {
-      // Update payment with the proof image URL
+      // Get the current payment to preserve existing gatewayResponse
+      const payment = await this.prismaService.payment.findUnique({
+        where: { id: body.paymentId },
+      });
+
+      if (!payment) {
+        throw new BadRequestException('Payment not found');
+      }
+
+      // Update payment with the proof image URL in gatewayResponse
       await this.prismaService.payment.update({
         where: { id: body.paymentId },
-        data: { proofImageUrl: body.url },
+        data: {
+          gatewayResponse: {
+            ...(payment.gatewayResponse as any),
+            screenshotUrl: body.url,
+            screenshotUploadedAt: new Date().toISOString(),
+          },
+        },
       });
 
       return {

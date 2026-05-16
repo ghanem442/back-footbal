@@ -51,6 +51,18 @@ let StorageService = StorageService_1 = class StorageService {
     async getSignedUrl(url, expiresIn) {
         return this.provider.getSignedUrl(url, expiresIn);
     }
+    generateCloudinarySignature(params) {
+        if (!(this.provider instanceof cloudinary_storage_provider_1.CloudinaryStorageProvider)) {
+            throw new Error('Signature generation is only available with Cloudinary storage provider');
+        }
+        return this.provider.generateSignature(params);
+    }
+    getCloudinaryUploadConfig() {
+        if (!(this.provider instanceof cloudinary_storage_provider_1.CloudinaryStorageProvider)) {
+            throw new Error('Cloudinary config is only available with Cloudinary storage provider');
+        }
+        return this.provider.getUploadConfig();
+    }
 };
 exports.StorageService = StorageService;
 exports.StorageService = StorageService = StorageService_1 = __decorate([

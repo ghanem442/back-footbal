@@ -84,7 +84,7 @@ export declare class PaymentController {
         data: {
             paymentId: string;
             transactionId: string;
-            status: "SUCCESS" | "PENDING";
+            status: "PENDING" | "SUCCESS";
             redirectUrl: string | undefined;
             amount: import("@prisma/client/runtime/library").Decimal;
             currency: string;

@@ -14,4 +14,9 @@ export declare class StorageService implements StorageProvider {
     upload(file: Buffer, filename: string, mimeType: string): Promise<string>;
     delete(url: string): Promise<void>;
     getSignedUrl(url: string, expiresIn: number): Promise<string>;
+    generateCloudinarySignature(params: Record<string, any>): string;
+    getCloudinaryUploadConfig(): {
+        cloudName: string;
+        apiKey: string;
+    };
 }
