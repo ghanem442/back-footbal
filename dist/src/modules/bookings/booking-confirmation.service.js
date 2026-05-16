@@ -114,14 +114,6 @@ let BookingConfirmationService = BookingConfirmationService_1 = class BookingCon
             isolationLevel: client_1.Prisma.TransactionIsolationLevel.Serializable,
             timeout: 10000,
         });
-        this.qrService.generateQrCodeForBooking(bookingId)
-            .then((qrCode) => {
-            this.logger.log(`QR code generated for booking ${bookingId}: ${qrCode.imageUrl}`);
-        })
-            .catch((error) => {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            this.logger.error(`Failed to generate QR code for booking ${bookingId}: ${errorMessage}`);
-        });
         this.sendConfirmationNotifications(bookingId, confirmedBooking)
             .catch((error) => {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';

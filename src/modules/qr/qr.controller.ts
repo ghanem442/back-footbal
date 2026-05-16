@@ -88,6 +88,7 @@ export class QrController {
       where: { id: bookingId },
       include: {
         qrCode: true,
+        payment: true,
         field: {
           select: {
             id: true,
@@ -105,6 +106,18 @@ export class QrController {
     // Ensure the player can only access their own booking's QR
     if (booking.playerId !== user.userId) {
       throw new ForbiddenException('Access denied');
+    }
+
+    // Check if payment is approved (COMPLETED status)
+    if (booking.payment && booking.payment.status !== 'COMPLETED') {
+      throw new ForbiddenException({
+        code: 'PAYMENT_NOT_APPROVED',
+        message: {
+          en: 'Payment not yet approved by admin',
+          ar: 'لم تتم الموافقة على الدفع من قبل المسؤول بعد',
+        },
+        paymentStatus: booking.payment.status,
+      });
     }
 
     if (!booking.qrCode) {

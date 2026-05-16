@@ -35,6 +35,7 @@ let QrController = class QrController {
             where: { id: bookingId },
             include: {
                 qrCode: true,
+                payment: true,
                 field: {
                     select: {
                         id: true,
@@ -49,6 +50,16 @@ let QrController = class QrController {
         }
         if (booking.playerId !== user.userId) {
             throw new common_1.ForbiddenException('Access denied');
+        }
+        if (booking.payment && booking.payment.status !== 'COMPLETED') {
+            throw new common_1.ForbiddenException({
+                code: 'PAYMENT_NOT_APPROVED',
+                message: {
+                    en: 'Payment not yet approved by admin',
+                    ar: 'لم تتم الموافقة على الدفع من قبل المسؤول بعد',
+                },
+                paymentStatus: booking.payment.status,
+            });
         }
         if (!booking.qrCode) {
             throw new common_1.NotFoundException('QR code not found for this booking');

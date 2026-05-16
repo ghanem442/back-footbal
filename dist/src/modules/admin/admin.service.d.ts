@@ -2,14 +2,16 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { PlatformWalletService } from '@modules/platform-wallet/platform-wallet.service';
 import { BookingConfirmationService } from '@modules/bookings/booking-confirmation.service';
+import { QrService } from '@modules/qr/qr.service';
 export declare class AdminService {
     private readonly prisma;
     private readonly platformWalletService;
     private readonly bookingConfirmationService;
+    private readonly qrService;
     private readonly logger;
     private readonly GLOBAL_COMMISSION_KEY;
     private readonly DEFAULT_COMMISSION_RATE;
-    constructor(prisma: PrismaService, platformWalletService: PlatformWalletService, bookingConfirmationService: BookingConfirmationService);
+    constructor(prisma: PrismaService, platformWalletService: PlatformWalletService, bookingConfirmationService: BookingConfirmationService, qrService: QrService);
     getGlobalCommissionRate(): Promise<number>;
     updateGlobalCommissionRate(commissionRate: number): Promise<number>;
     updateFieldCommissionRate(fieldId: string, commissionRate: number | null): Promise<{

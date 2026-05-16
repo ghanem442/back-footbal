@@ -17,11 +17,13 @@ const client_1 = require("@prisma/client");
 const library_1 = require("@prisma/client/runtime/library");
 const platform_wallet_service_1 = require("../platform-wallet/platform-wallet.service");
 const booking_confirmation_service_1 = require("../bookings/booking-confirmation.service");
+const qr_service_1 = require("../qr/qr.service");
 let AdminService = AdminService_1 = class AdminService {
-    constructor(prisma, platformWalletService, bookingConfirmationService) {
+    constructor(prisma, platformWalletService, bookingConfirmationService, qrService) {
         this.prisma = prisma;
         this.platformWalletService = platformWalletService;
         this.bookingConfirmationService = bookingConfirmationService;
+        this.qrService = qrService;
         this.logger = new common_1.Logger(AdminService_1.name);
         this.GLOBAL_COMMISSION_KEY = 'global_commission_rate';
         this.DEFAULT_COMMISSION_RATE = 10;
@@ -1606,6 +1608,14 @@ let AdminService = AdminService_1 = class AdminService {
         const confirmedBooking = await this.prisma.booking.findUniqueOrThrow({
             where: { id: payment.bookingId },
         });
+        this.qrService.generateQrCodeForBooking(payment.bookingId)
+            .then((qrCode) => {
+            this.logger.log(`QR code generated for booking ${payment.bookingId} after payment approval: ${qrCode.imageUrl}`);
+        })
+            .catch((error) => {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            this.logger.error(`Failed to generate QR code for booking ${payment.bookingId}: ${errorMessage}`);
+        });
         this.logger.log(`Payment ${paymentId} approved by admin ${adminId}. Booking ${payment.bookingId} confirmed.`);
         return {
             payment: {
@@ -1696,6 +1706,7 @@ exports.AdminService = AdminService = AdminService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         platform_wallet_service_1.PlatformWalletService,
-        booking_confirmation_service_1.BookingConfirmationService])
+        booking_confirmation_service_1.BookingConfirmationService,
+        qr_service_1.QrService])
 ], AdminService);
 //# sourceMappingURL=admin.service.js.map

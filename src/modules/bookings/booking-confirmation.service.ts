@@ -178,22 +178,8 @@ export class BookingConfirmationService {
       },
     );
 
-    // 6. Generate QR code AFTER transaction (async, won't block transaction)
-    // This can take 15+ seconds with Cloudinary upload, so it's done outside transaction
-    this.qrService.generateQrCodeForBooking(bookingId)
-      .then((qrCode) => {
-        this.logger.log(
-          `QR code generated for booking ${bookingId}: ${qrCode.imageUrl}`,
-        );
-      })
-      .catch((error) => {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        this.logger.error(
-          `Failed to generate QR code for booking ${bookingId}: ${errorMessage}`,
-        );
-        // QR generation failure doesn't affect booking confirmation
-        // QR can be regenerated later if needed
-      });
+    // Note: QR code generation is now handled by admin payment approval
+    // This prevents QR codes from being generated before payment is verified
 
     // 7. Send confirmation notifications AFTER transaction (async)
     this.sendConfirmationNotifications(bookingId, confirmedBooking)

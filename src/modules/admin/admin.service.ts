@@ -9,6 +9,7 @@ import { Prisma, WalletTransactionType } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PlatformWalletService } from '@modules/platform-wallet/platform-wallet.service';
 import { BookingConfirmationService } from '@modules/bookings/booking-confirmation.service';
+import { QrService } from '@modules/qr/qr.service';
 
 @Injectable()
 export class AdminService {
@@ -20,6 +21,7 @@ export class AdminService {
     private readonly prisma: PrismaService,
     private readonly platformWalletService: PlatformWalletService,
     private readonly bookingConfirmationService: BookingConfirmationService,
+    private readonly qrService: QrService,
   ) {}
 
   /**
@@ -2167,6 +2169,22 @@ export class AdminService {
     const confirmedBooking = await this.prisma.booking.findUniqueOrThrow({
       where: { id: payment.bookingId },
     });
+
+    // Generate QR code AFTER payment approval (async, won't block response)
+    this.qrService.generateQrCodeForBooking(payment.bookingId)
+      .then((qrCode) => {
+        this.logger.log(
+          `QR code generated for booking ${payment.bookingId} after payment approval: ${qrCode.imageUrl}`,
+        );
+      })
+      .catch((error) => {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        this.logger.error(
+          `Failed to generate QR code for booking ${payment.bookingId}: ${errorMessage}`,
+        );
+        // QR generation failure doesn't affect payment approval
+        // QR can be regenerated later if needed
+      });
 
     this.logger.log(
       `Payment ${paymentId} approved by admin ${adminId}. Booking ${payment.bookingId} confirmed.`,

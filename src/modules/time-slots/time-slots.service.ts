@@ -79,6 +79,23 @@ export class TimeSlotsService {
     }
 
     // Validate start time < end time
+    const [startH, startM] = dto.startTime.split(':').map(Number);
+    const [endH, endM] = dto.endTime.split(':').map(Number);
+    const startMinutes = startH * 60 + startM;
+    const endMinutes = endH * 60 + endM;
+
+    if (endMinutes <= startMinutes) {
+      throw new BadRequestException({
+        code: 'INVALID_TIME_RANGE',
+        message: {
+          en: 'End time must be after start time',
+          ar: 'يجب أن يكون وقت الانتهاء بعد وقت البدء',
+        },
+        startTime: dto.startTime,
+        endTime: dto.endTime,
+      });
+    }
+
     const startTime = this.parseTime(dto.startTime);
     const endTime = this.parseTime(dto.endTime);
 
