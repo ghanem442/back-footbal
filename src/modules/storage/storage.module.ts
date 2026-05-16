@@ -5,6 +5,7 @@ import { StorageController } from './storage.controller';
 import { LocalStorageProvider } from './providers/local-storage.provider';
 import { S3StorageProvider } from './providers/s3-storage.provider';
 import { CloudinaryStorageProvider } from './providers/cloudinary-storage.provider';
+import { PrismaModule } from '@modules/prisma/prisma.module';
 
 /**
  * Storage Module
@@ -19,7 +20,7 @@ import { CloudinaryStorageProvider } from './providers/cloudinary-storage.provid
  * Requirements: 24.4, 24.5, 24.6
  */
 @Module({
-  imports: [ConfigModule],
+  imports: [ConfigModule, PrismaModule],
   controllers: [StorageController],
   providers: [
     StorageService,

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { StorageProvider } from '../interfaces/storage-provider.interface';
 import { v4 as uuidv4 } from 'uuid';
+import * as crypto from 'crypto';
 
 /**
  * Cloudinary Storage Provider
@@ -18,6 +19,8 @@ export class CloudinaryStorageProvider implements StorageProvider {
   private readonly logger = new Logger(CloudinaryStorageProvider.name);
   private readonly cloudinary: any;
   private readonly cloudName: string;
+  private readonly apiKey: string;
+  private readonly apiSecret: string;
   private readonly isConfigured: boolean;
 
   constructor(private readonly configService: ConfigService) {
@@ -25,6 +28,8 @@ export class CloudinaryStorageProvider implements StorageProvider {
     const apiKey = this.configService.get<string>('CLOUDINARY_API_KEY');
     const apiSecret = this.configService.get<string>('CLOUDINARY_API_SECRET');
     
+    this.apiKey = apiKey || '';
+    this.apiSecret = apiSecret || '';
     this.isConfigured = !!(this.cloudName && apiKey && apiSecret);
 
     if (this.isConfigured) {
@@ -175,5 +180,51 @@ export class CloudinaryStorageProvider implements StorageProvider {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`Failed to extract public ID from URL: ${errorMessage}`);
     }
+  }
+
+  /**
+   * Generate a signature for client-side Cloudinary uploads
+   * This allows Flutter to upload directly to Cloudinary without exposing the API secret
+   */
+  generateSignature(params: Record<string, any>): string {
+    if (!this.isConfigured) {
+      throw new Error('Cloudinary storage is not configured.');
+    }
+
+    try {
+      // Sort params alphabetically and create string
+      const sortedParams = Object.keys(params)
+        .sort()
+        .map(key => `${key}=${params[key]}`)
+        .join('&');
+
+      // Sign with API secret
+      const signature = crypto
+        .createHash('sha256')
+        .update(sortedParams + this.apiSecret)
+        .digest('hex');
+
+      this.logger.log('Generated Cloudinary upload signature');
+
+      return signature;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to generate Cloudinary signature: ${errorMessage}`);
+      throw new Error(`Cloudinary signature generation failed: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Get Cloudinary configuration for client-side uploads
+   */
+  getUploadConfig(): { cloudName: string; apiKey: string } {
+    if (!this.isConfigured) {
+      throw new Error('Cloudinary storage is not configured.');
+    }
+
+    return {
+      cloudName: this.cloudName,
+      apiKey: this.apiKey,
+    };
   }
 }

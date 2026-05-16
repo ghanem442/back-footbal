@@ -80,4 +80,26 @@ export class StorageService implements StorageProvider {
   async getSignedUrl(url: string, expiresIn: number): Promise<string> {
     return this.provider.getSignedUrl(url, expiresIn);
   }
+
+  /**
+   * Generate a signature for client-side Cloudinary uploads
+   * Only available when using Cloudinary provider
+   */
+  generateCloudinarySignature(params: Record<string, any>): string {
+    if (!(this.provider instanceof CloudinaryStorageProvider)) {
+      throw new Error('Signature generation is only available with Cloudinary storage provider');
+    }
+    return this.provider.generateSignature(params);
+  }
+
+  /**
+   * Get Cloudinary configuration for client-side uploads
+   * Only available when using Cloudinary provider
+   */
+  getCloudinaryUploadConfig(): { cloudName: string; apiKey: string } {
+    if (!(this.provider instanceof CloudinaryStorageProvider)) {
+      throw new Error('Cloudinary config is only available with Cloudinary storage provider');
+    }
+    return this.provider.getUploadConfig();
+  }
 }
