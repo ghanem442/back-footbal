@@ -19,8 +19,8 @@ export declare class QrController {
                 bookingNumber: string | null;
                 status: import(".prisma/client").$Enums.BookingStatus;
                 scheduledDate: Date;
-                scheduledStartTime: Date;
-                scheduledEndTime: Date;
+                scheduledStartTime: string;
+                scheduledEndTime: string;
                 field: {
                     id: string;
                     name: string;
@@ -41,8 +41,8 @@ export declare class QrController {
             status: "CHECKED_IN";
             playerName: string;
             fieldName: string;
-            scheduledStartTime: Date;
-            scheduledEndTime: Date;
+            scheduledStartTime: string;
+            scheduledEndTime: string;
         };
     }>;
     verifyBookingId(verifyBookingIdDto: VerifyBookingIdDto, user: any): Promise<{
@@ -53,8 +53,8 @@ export declare class QrController {
             status: "CHECKED_IN";
             playerName: string;
             fieldName: string;
-            scheduledStartTime: Date;
-            scheduledEndTime: Date;
+            scheduledStartTime: string;
+            scheduledEndTime: string;
         };
     }>;
 }

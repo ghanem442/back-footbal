@@ -12,7 +12,9 @@ export declare class TimeSlotsService {
     createTimeSlot(userId: string, dto: CreateTimeSlotDto): Promise<any>;
     private parseTime;
     queryTimeSlots(dto: QueryTimeSlotsDto): Promise<{
-        data: ({
+        data: {
+            startTime: string;
+            endTime: string;
             field: {
                 id: string;
                 name: string;
@@ -21,17 +23,14 @@ export declare class TimeSlotsService {
                 longitude: number | null;
                 averageRating: number | null;
             };
-        } & {
             id: string;
             createdAt: Date;
             updatedAt: Date;
             date: Date;
             status: import(".prisma/client").$Enums.SlotStatus;
             fieldId: string;
-            startTime: Date;
-            endTime: Date;
             price: import("@prisma/client/runtime/library").Decimal;
-        })[];
+        }[];
         pagination: {
             page: number;
             limit: number;
@@ -45,20 +44,19 @@ export declare class TimeSlotsService {
         endTime: string;
         price: number;
     }>): Promise<{
+        startTime: string;
+        endTime: string;
         field: {
             id: string;
             name: string;
             address: string;
         };
-    } & {
         id: string;
         createdAt: Date;
         updatedAt: Date;
         date: Date;
         status: import(".prisma/client").$Enums.SlotStatus;
         fieldId: string;
-        startTime: Date;
-        endTime: Date;
         price: import("@prisma/client/runtime/library").Decimal;
     }>;
     deleteTimeSlot(timeSlotId: string, userId: string): Promise<void>;

@@ -32,7 +32,9 @@ export declare class TimeSlotsController {
     }>;
     queryTimeSlots(queryDto: QueryTimeSlotsDto): Promise<{
         success: boolean;
-        data: ({
+        data: {
+            startTime: string;
+            endTime: string;
             field: {
                 id: string;
                 name: string;
@@ -41,17 +43,14 @@ export declare class TimeSlotsController {
                 longitude: number | null;
                 averageRating: number | null;
             };
-        } & {
             id: string;
             createdAt: Date;
             updatedAt: Date;
             date: Date;
             status: import(".prisma/client").$Enums.SlotStatus;
             fieldId: string;
-            startTime: Date;
-            endTime: Date;
             price: import("@prisma/client/runtime/library").Decimal;
-        })[];
+        }[];
         pagination: {
             page: number;
             limit: number;
@@ -67,20 +66,19 @@ export declare class TimeSlotsController {
     updateTimeSlot(userId: string, timeSlotId: string, updateTimeSlotDto: UpdateTimeSlotDto): Promise<{
         success: boolean;
         data: {
+            startTime: string;
+            endTime: string;
             field: {
                 id: string;
                 name: string;
                 address: string;
             };
-        } & {
             id: string;
             createdAt: Date;
             updatedAt: Date;
             date: Date;
             status: import(".prisma/client").$Enums.SlotStatus;
             fieldId: string;
-            startTime: Date;
-            endTime: Date;
             price: import("@prisma/client/runtime/library").Decimal;
         };
         message: {

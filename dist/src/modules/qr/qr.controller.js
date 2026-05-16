@@ -77,8 +77,8 @@ let QrController = class QrController {
                     bookingNumber: booking.bookingNumber,
                     status: booking.status,
                     scheduledDate: booking.scheduledDate,
-                    scheduledStartTime: booking.scheduledStartTime,
-                    scheduledEndTime: booking.scheduledEndTime,
+                    scheduledStartTime: booking.scheduledStartTime.toISOString().substring(11, 16),
+                    scheduledEndTime: booking.scheduledEndTime.toISOString().substring(11, 16),
                     field: booking.field,
                 },
             },
@@ -132,8 +132,8 @@ let QrController = class QrController {
                 status: client_2.BookingStatus.CHECKED_IN,
                 playerName: booking.player.email,
                 fieldName: booking.field.name,
-                scheduledStartTime: booking.scheduledStartTime,
-                scheduledEndTime: booking.scheduledEndTime,
+                scheduledStartTime: booking.scheduledStartTime.toISOString().substring(11, 16),
+                scheduledEndTime: booking.scheduledEndTime.toISOString().substring(11, 16),
             },
         };
     }
@@ -182,8 +182,8 @@ let QrController = class QrController {
                 status: client_2.BookingStatus.CHECKED_IN,
                 playerName: booking.player.email,
                 fieldName: booking.field.name,
-                scheduledStartTime: booking.scheduledStartTime,
-                scheduledEndTime: booking.scheduledEndTime,
+                scheduledStartTime: booking.scheduledStartTime.toISOString().substring(11, 16),
+                scheduledEndTime: booking.scheduledEndTime.toISOString().substring(11, 16),
             },
         };
     }

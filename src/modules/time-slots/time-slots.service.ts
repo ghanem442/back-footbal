@@ -170,11 +170,18 @@ export class TimeSlotsService {
       },
     });
 
+    // Format times as plain strings to avoid timezone issues
+    const formattedTimeSlot = {
+      ...timeSlot,
+      startTime: timeSlot.startTime.toISOString().substring(11, 16), // "09:00"
+      endTime: timeSlot.endTime.toISOString().substring(11, 16),     // "10:00"
+    };
+
     // Cache the result for 10 seconds to prevent duplicate requests
-    await redis.set(idempotencyKey, JSON.stringify(timeSlot), { EX: 10 });
+    await redis.set(idempotencyKey, JSON.stringify(formattedTimeSlot), { EX: 10 });
     console.log(`[Idempotency] Cached result for key: ${idempotencyKey} (TTL: 10s)`);
 
-    return timeSlot;
+    return formattedTimeSlot;
   }
 
   /**
@@ -266,8 +273,15 @@ export class TimeSlotsService {
       this.prisma.timeSlot.count({ where }),
     ]);
 
+    // Format times as plain strings to avoid timezone issues
+    const formattedTimeSlots = timeSlots.map(slot => ({
+      ...slot,
+      startTime: slot.startTime.toISOString().substring(11, 16), // "09:00"
+      endTime: slot.endTime.toISOString().substring(11, 16),     // "10:00"
+    }));
+
     return {
-      data: timeSlots,
+      data: formattedTimeSlots,
       pagination: {
         page,
         limit,
@@ -436,7 +450,12 @@ export class TimeSlotsService {
       },
     });
 
-    return updatedTimeSlot;
+    // Format times as plain strings to avoid timezone issues
+    return {
+      ...updatedTimeSlot,
+      startTime: updatedTimeSlot.startTime.toISOString().substring(11, 16), // "09:00"
+      endTime: updatedTimeSlot.endTime.toISOString().substring(11, 16),     // "10:00"
+    };
   }
 
   /**

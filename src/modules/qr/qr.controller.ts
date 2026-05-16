@@ -137,8 +137,8 @@ export class QrController {
           bookingNumber: booking.bookingNumber,
           status: booking.status,
           scheduledDate: booking.scheduledDate,
-          scheduledStartTime: booking.scheduledStartTime,
-          scheduledEndTime: booking.scheduledEndTime,
+          scheduledStartTime: booking.scheduledStartTime.toISOString().substring(11, 16), // "09:00"
+          scheduledEndTime: booking.scheduledEndTime.toISOString().substring(11, 16),     // "10:00"
           field: booking.field,
         },
       },
@@ -259,8 +259,8 @@ export class QrController {
         status: BookingStatus.CHECKED_IN,
         playerName: booking.player.email,
         fieldName: booking.field.name,
-        scheduledStartTime: booking.scheduledStartTime,
-        scheduledEndTime: booking.scheduledEndTime,
+        scheduledStartTime: booking.scheduledStartTime.toISOString().substring(11, 16), // "09:00"
+        scheduledEndTime: booking.scheduledEndTime.toISOString().substring(11, 16),     // "10:00"
       },
     };
   }
@@ -371,8 +371,8 @@ export class QrController {
         status: BookingStatus.CHECKED_IN,
         playerName: booking.player.email,
         fieldName: booking.field.name,
-        scheduledStartTime: booking.scheduledStartTime,
-        scheduledEndTime: booking.scheduledEndTime,
+        scheduledStartTime: booking.scheduledStartTime.toISOString().substring(11, 16), // "09:00"
+        scheduledEndTime: booking.scheduledEndTime.toISOString().substring(11, 16),     // "10:00"
       },
     };
   }

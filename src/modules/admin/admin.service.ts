@@ -1234,8 +1234,8 @@ export class AdminService {
           email: booking.field.owner.email,
         },
         date: booking.scheduledDate.toISOString().split('T')[0],
-        startTime: booking.scheduledStartTime.toISOString().split('T')[1].substring(0, 8),
-        endTime: booking.scheduledEndTime.toISOString().split('T')[1].substring(0, 8),
+        startTime: booking.scheduledStartTime.toISOString().substring(11, 16), // "09:00"
+        endTime: booking.scheduledEndTime.toISOString().substring(11, 16),     // "10:00"
         status: booking.status,
         paymentStatus: depositPaid ? (remainingAmount > 0 ? 'PARTIAL' : 'FULL') : 'PENDING',
         totalPrice: parseFloat(booking.totalPrice.toString()),
@@ -2073,8 +2073,8 @@ export class AdminService {
         id: payment.booking.id,
         bookingNumber: payment.booking.bookingNumber,
         scheduledDate: payment.booking.scheduledDate,
-        scheduledStartTime: payment.booking.scheduledStartTime,
-        scheduledEndTime: payment.booking.scheduledEndTime,
+        scheduledStartTime: payment.booking.scheduledStartTime.toISOString().substring(11, 16), // "09:00"
+        scheduledEndTime: payment.booking.scheduledEndTime.toISOString().substring(11, 16),     // "10:00"
         status: payment.booking.status,
         player: payment.booking.player,
         field: payment.booking.field,

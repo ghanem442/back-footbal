@@ -119,9 +119,14 @@ let TimeSlotsService = class TimeSlotsService {
                 },
             },
         });
-        await redis.set(idempotencyKey, JSON.stringify(timeSlot), { EX: 10 });
+        const formattedTimeSlot = {
+            ...timeSlot,
+            startTime: timeSlot.startTime.toISOString().substring(11, 16),
+            endTime: timeSlot.endTime.toISOString().substring(11, 16),
+        };
+        await redis.set(idempotencyKey, JSON.stringify(formattedTimeSlot), { EX: 10 });
         console.log(`[Idempotency] Cached result for key: ${idempotencyKey} (TTL: 10s)`);
-        return timeSlot;
+        return formattedTimeSlot;
     }
     parseTime(timeStr) {
         const [hours, minutes] = timeStr.split(':').map(Number);
@@ -187,8 +192,13 @@ let TimeSlotsService = class TimeSlotsService {
             }),
             this.prisma.timeSlot.count({ where }),
         ]);
+        const formattedTimeSlots = timeSlots.map(slot => ({
+            ...slot,
+            startTime: slot.startTime.toISOString().substring(11, 16),
+            endTime: slot.endTime.toISOString().substring(11, 16),
+        }));
         return {
-            data: timeSlots,
+            data: formattedTimeSlots,
             pagination: {
                 page,
                 limit,
@@ -295,7 +305,11 @@ let TimeSlotsService = class TimeSlotsService {
                 },
             },
         });
-        return updatedTimeSlot;
+        return {
+            ...updatedTimeSlot,
+            startTime: updatedTimeSlot.startTime.toISOString().substring(11, 16),
+            endTime: updatedTimeSlot.endTime.toISOString().substring(11, 16),
+        };
     }
     async deleteTimeSlot(timeSlotId, userId) {
         const timeSlot = await this.prisma.timeSlot.findUnique({

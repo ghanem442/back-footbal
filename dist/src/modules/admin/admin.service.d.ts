@@ -500,8 +500,8 @@ export declare class AdminService {
                 id: string;
                 bookingNumber: string | null;
                 scheduledDate: Date;
-                scheduledStartTime: Date;
-                scheduledEndTime: Date;
+                scheduledStartTime: string;
+                scheduledEndTime: string;
                 status: import(".prisma/client").$Enums.BookingStatus;
                 player: {
                     id: string;
