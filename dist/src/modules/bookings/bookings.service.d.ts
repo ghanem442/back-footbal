@@ -324,6 +324,7 @@ export declare class BookingsService {
         refundAmount: number;
         refundPercentage: number;
     }>;
+    private sendCancellationNotifications;
     checkInBooking(bookingId: string, fieldOwnerId: string): Promise<{
         field: {
             id: string;
@@ -428,6 +429,7 @@ export declare class BookingsService {
         cancelledBy: string | null;
         refundAmount: Prisma.Decimal | null;
     }>;
+    private sendNoShowNotification;
     completeBooking(bookingId: string): Promise<{
         field: {
             id: string;

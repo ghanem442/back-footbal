@@ -13,13 +13,22 @@ exports.TimeSlotsService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../prisma/prisma.service");
 const i18n_service_1 = require("../i18n/i18n.service");
+const redis_service_1 = require("../redis/redis.service");
 const client_1 = require("@prisma/client");
 let TimeSlotsService = class TimeSlotsService {
-    constructor(prisma, i18n) {
+    constructor(prisma, i18n, redisService) {
         this.prisma = prisma;
         this.i18n = i18n;
+        this.redisService = redisService;
     }
     async createTimeSlot(userId, dto) {
+        const idempotencyKey = `timeslot:${userId}:${dto.fieldId}:${dto.date}:${dto.startTime}:${dto.endTime}`;
+        const redis = this.redisService.getCacheClient();
+        const existing = await redis.get(idempotencyKey);
+        if (existing) {
+            console.log(`[Idempotency] Returning cached result for key: ${idempotencyKey}`);
+            return JSON.parse(existing);
+        }
         const field = await this.prisma.field.findUnique({
             where: { id: dto.fieldId },
         });
@@ -95,6 +104,8 @@ let TimeSlotsService = class TimeSlotsService {
                 },
             },
         });
+        await redis.set(idempotencyKey, JSON.stringify(timeSlot), { EX: 10 });
+        console.log(`[Idempotency] Cached result for key: ${idempotencyKey} (TTL: 10s)`);
         return timeSlot;
     }
     parseTime(timeStr) {
@@ -423,6 +434,7 @@ exports.TimeSlotsService = TimeSlotsService;
 exports.TimeSlotsService = TimeSlotsService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        i18n_service_1.I18nService])
+        i18n_service_1.I18nService,
+        redis_service_1.RedisService])
 ], TimeSlotsService);
 //# sourceMappingURL=time-slots.service.js.map

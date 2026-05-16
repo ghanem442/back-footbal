@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '@modules/prisma/prisma.service';
 import { I18nService } from '@modules/i18n/i18n.service';
+import { RedisService } from '@modules/redis/redis.service';
 import { CreateTimeSlotDto } from './dto/create-time-slot.dto';
 import { QueryTimeSlotsDto } from './dto/query-time-slots.dto';
 import { BulkCreateTimeSlotsDto } from './dto/bulk-create-time-slots.dto';
@@ -16,6 +17,7 @@ export class TimeSlotsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly i18n: I18nService,
+    private readonly redisService: RedisService,
   ) {}
 
   /**
@@ -24,8 +26,23 @@ export class TimeSlotsService {
    * - Field exists and is owned by the user
    * - Start time is before end time
    * - No overlapping slots on the same field and date
+   * 
+   * Implements Redis-based idempotency to prevent duplicate requests within 10 seconds
    */
   async createTimeSlot(userId: string, dto: CreateTimeSlotDto) {
+    // Create a unique idempotency key for this exact request
+    const idempotencyKey = `timeslot:${userId}:${dto.fieldId}:${dto.date}:${dto.startTime}:${dto.endTime}`;
+    
+    // Check if same request was made in last 10 seconds
+    const redis = this.redisService.getCacheClient();
+    const existing = await redis.get(idempotencyKey);
+    
+    if (existing) {
+      // Return the previous result instead of creating duplicate
+      console.log(`[Idempotency] Returning cached result for key: ${idempotencyKey}`);
+      return JSON.parse(existing);
+    }
+
     // Validate field ownership
     const field = await this.prisma.field.findUnique({
       where: { id: dto.fieldId },
@@ -135,6 +152,10 @@ export class TimeSlotsService {
         },
       },
     });
+
+    // Cache the result for 10 seconds to prevent duplicate requests
+    await redis.set(idempotencyKey, JSON.stringify(timeSlot), { EX: 10 });
+    console.log(`[Idempotency] Cached result for key: ${idempotencyKey} (TTL: 10s)`);
 
     return timeSlot;
   }

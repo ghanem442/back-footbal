@@ -1,29 +1,15 @@
 import { PrismaService } from '@modules/prisma/prisma.service';
 import { I18nService } from '@modules/i18n/i18n.service';
+import { RedisService } from '@modules/redis/redis.service';
 import { CreateTimeSlotDto } from './dto/create-time-slot.dto';
 import { QueryTimeSlotsDto } from './dto/query-time-slots.dto';
 import { BulkCreateTimeSlotsDto } from './dto/bulk-create-time-slots.dto';
 export declare class TimeSlotsService {
     private readonly prisma;
     private readonly i18n;
-    constructor(prisma: PrismaService, i18n: I18nService);
-    createTimeSlot(userId: string, dto: CreateTimeSlotDto): Promise<{
-        field: {
-            id: string;
-            name: string;
-            address: string;
-        };
-    } & {
-        id: string;
-        createdAt: Date;
-        updatedAt: Date;
-        date: Date;
-        status: import(".prisma/client").$Enums.SlotStatus;
-        fieldId: string;
-        startTime: Date;
-        endTime: Date;
-        price: import("@prisma/client/runtime/library").Decimal;
-    }>;
+    private readonly redisService;
+    constructor(prisma: PrismaService, i18n: I18nService, redisService: RedisService);
+    createTimeSlot(userId: string, dto: CreateTimeSlotDto): Promise<any>;
     private parseTime;
     queryTimeSlots(dto: QueryTimeSlotsDto): Promise<{
         data: ({

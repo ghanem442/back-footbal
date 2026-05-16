@@ -10,23 +10,7 @@ export declare class TimeSlotsController {
     constructor(timeSlotsService: TimeSlotsService, i18n: I18nService);
     createTimeSlot(userId: string, createTimeSlotDto: CreateTimeSlotDto): Promise<{
         success: boolean;
-        data: {
-            field: {
-                id: string;
-                name: string;
-                address: string;
-            };
-        } & {
-            id: string;
-            createdAt: Date;
-            updatedAt: Date;
-            date: Date;
-            status: import(".prisma/client").$Enums.SlotStatus;
-            fieldId: string;
-            startTime: Date;
-            endTime: Date;
-            price: import("@prisma/client/runtime/library").Decimal;
-        };
+        data: any;
         message: {
             en: string;
             ar: string;

@@ -514,7 +514,8 @@ export class BookingsService {
       });
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    // Execute critical database operations in transaction (fast operations only)
+    const result = await this.prisma.$transaction(async (tx) => {
       // Lock the booking row to prevent race conditions / double refund
       const [lockedBooking] = await tx.$queryRaw<any[]>`
         SELECT id, status, "playerId", "timeSlotId", "depositAmount", "scheduledDate",
@@ -656,50 +657,83 @@ export class BookingsService {
         });
       }
 
-      // Send cancellation notifications
-      try {
-        // Get player and field owner preferred languages
-        const player = await tx.user.findUnique({
-          where: { id: booking.playerId },
-          select: { preferredLanguage: true },
-        });
-
-        const fieldOwner = await tx.user.findUnique({
-          where: { id: booking.field.ownerId },
-          select: { preferredLanguage: true },
-        });
-
-        const formattedDate = new Date(booking.scheduledDate).toLocaleDateString();
-        const refundAmountStr = refundCalculation.refundAmount.toFixed(2);
-
-        // Send notification to player
-        await this.notificationsService.sendCancellationNotification(
-          booking.playerId,
-          updatedBooking.field.name,
-          formattedDate,
-          refundAmountStr,
-          player?.preferredLanguage || 'en',
-        );
-
-        // Send notification to field owner
-        await this.notificationsService.sendCancellationNotification(
-          booking.field.ownerId,
-          updatedBooking.field.name,
-          formattedDate,
-          refundAmountStr,
-          fieldOwner?.preferredLanguage || 'en',
-        );
-      } catch (error) {
-        // Log error but don't fail the transaction
-        console.error('Failed to send cancellation notifications:', error);
-      }
-
       return {
         booking: updatedBooking,
         refundAmount: refundCalculation.refundAmount,
         refundPercentage: refundCalculation.refundPercentage,
+        playerId: booking.playerId,
+        fieldOwnerId: booking.field.ownerId,
+        fieldName: updatedBooking.field.name,
+        scheduledDate: booking.scheduledDate,
       };
     });
+
+    // Send cancellation notifications AFTER transaction (async, won't block transaction)
+    this.sendCancellationNotifications(
+      result.playerId,
+      result.fieldOwnerId,
+      result.fieldName,
+      result.scheduledDate,
+      result.refundAmount,
+    ).catch((error) => {
+      // Log error but don't fail the cancellation
+      console.error('Failed to send cancellation notifications:', error);
+    });
+
+    return {
+      booking: result.booking,
+      refundAmount: result.refundAmount,
+      refundPercentage: result.refundPercentage,
+    };
+  }
+
+  /**
+   * Send cancellation notifications (extracted to separate method)
+   * This runs asynchronously after the transaction commits
+   */
+  private async sendCancellationNotifications(
+    playerId: string,
+    fieldOwnerId: string,
+    fieldName: string,
+    scheduledDate: Date,
+    refundAmount: number,
+  ) {
+    try {
+      // Get player and field owner preferred languages
+      const player = await this.prisma.user.findUnique({
+        where: { id: playerId },
+        select: { preferredLanguage: true },
+      });
+
+      const fieldOwner = await this.prisma.user.findUnique({
+        where: { id: fieldOwnerId },
+        select: { preferredLanguage: true },
+      });
+
+      const formattedDate = new Date(scheduledDate).toLocaleDateString();
+      const refundAmountStr = refundAmount.toFixed(2);
+
+      // Send notification to player
+      await this.notificationsService.sendCancellationNotification(
+        playerId,
+        fieldName,
+        formattedDate,
+        refundAmountStr,
+        player?.preferredLanguage || 'en',
+      );
+
+      // Send notification to field owner
+      await this.notificationsService.sendCancellationNotification(
+        fieldOwnerId,
+        fieldName,
+        formattedDate,
+        refundAmountStr,
+        fieldOwner?.preferredLanguage || 'en',
+      );
+    } catch (error) {
+      // Re-throw to be caught by caller
+      throw error;
+    }
   }
 
   /**
@@ -755,108 +789,128 @@ export class BookingsService {
    * - Platform keeps its commission
    */
   async markNoShow(bookingId: string, ownerId: string) {
-      return this.prisma.$transaction(async (tx) => {
-        const booking = await tx.booking.findUnique({
-          where: { id: bookingId },
-          include: {
-            field: {
-              select: {
-                ownerId: true,
-              },
+    // Execute critical database operations in transaction (fast operations only)
+    const result = await this.prisma.$transaction(async (tx) => {
+      const booking = await tx.booking.findUnique({
+        where: { id: bookingId },
+        include: {
+          field: {
+            select: {
+              ownerId: true,
+              name: true,
             },
           },
+        },
+      });
+
+      if (!booking) {
+        throw new NotFoundException('Booking not found');
+      }
+
+      // Verify ownership
+      if (booking.field.ownerId !== ownerId) {
+        throw new ForbiddenException({
+          en: 'Only the field owner can mark this booking as no-show',
+          ar: 'يمكن لصاحب الملعب فقط تحديد هذا الحجز كعدم حضور',
         });
+      }
 
-        if (!booking) {
-          throw new NotFoundException('Booking not found');
-        }
+      // Update booking status to NO_SHOW
+      const updatedBooking = await this.updateBookingStatus(
+        bookingId,
+        BookingStatus.NO_SHOW,
+        'Player did not show up',
+      );
 
-        // Verify ownership
-        if (booking.field.ownerId !== ownerId) {
-          throw new ForbiddenException({
-            en: 'Only the field owner can mark this booking as no-show',
-            ar: 'يمكن لصاحب الملعب فقط تحديد هذا الحجز كعدم حضور',
-          });
-        }
+      // Increment player's no-show count
+      await tx.user.update({
+        where: { id: booking.playerId },
+        data: {
+          noShowCount: {
+            increment: 1,
+          },
+        },
+      });
 
-        // Update booking status to NO_SHOW
-        const updatedBooking = await this.updateBookingStatus(
-          bookingId,
-          BookingStatus.NO_SHOW,
-          'Player did not show up',
-        );
+      // Check if player should be suspended (3 no-shows)
+      const player = await tx.user.findUnique({
+        where: { id: booking.playerId },
+        select: { noShowCount: true, preferredLanguage: true },
+      });
 
-        // Increment player's no-show count
+      if (player && player.noShowCount >= 3) {
+        const suspensionEnd = new Date();
+        suspensionEnd.setDate(suspensionEnd.getDate() + 30); // 30 days suspension
+
         await tx.user.update({
           where: { id: booking.playerId },
           data: {
-            noShowCount: {
-              increment: 1,
-            },
+            suspendedUntil: suspensionEnd,
           },
         });
+      }
 
-        // Check if player should be suspended (3 no-shows)
-        const player = await tx.user.findUnique({
-          where: { id: booking.playerId },
-          select: { noShowCount: true, preferredLanguage: true },
-        });
+      // Credit field owner with the commission portion as no-show compensation
+      // Field owner already received: depositAmount - commissionAmount
+      // Now they receive the commission portion too, so they get the full deposit
+      const commissionAmount = Number(booking.commissionAmount);
 
-        if (player && player.noShowCount >= 3) {
-          const suspensionEnd = new Date();
-          suspensionEnd.setDate(suspensionEnd.getDate() + 30); // 30 days suspension
+      if (commissionAmount > 0) {
+        await this.walletService.credit(
+          booking.field.ownerId,
+          commissionAmount,
+          WalletTransactionType.CREDIT,
+          `No-show compensation for booking ${bookingId}`,
+          bookingId,
+          { actorRole: 'OWNER', transactionPurpose: 'OWNER_ONLINE_SHARE' },
+        );
+      }
 
-          await tx.user.update({
-            where: { id: booking.playerId },
-            data: {
-              suspendedUntil: suspensionEnd,
-            },
-          });
-        }
+      return {
+        booking: updatedBooking,
+        playerId: booking.playerId,
+        fieldName: booking.field.name,
+        noShowCount: player?.noShowCount || 0,
+        preferredLanguage: player?.preferredLanguage || 'en',
+      };
+    });
 
-        // Credit field owner with the commission portion as no-show compensation
-        // Field owner already received: depositAmount - commissionAmount
-        // Now they receive the commission portion too, so they get the full deposit
-        const commissionAmount = Number(booking.commissionAmount);
+    // Send no-show notification AFTER transaction (async, won't block transaction)
+    this.sendNoShowNotification(
+      result.playerId,
+      result.fieldName,
+      result.noShowCount,
+      result.preferredLanguage,
+    ).catch((error) => {
+      // Log error but don't fail the no-show marking
+      console.error('Failed to send no-show notification:', error);
+    });
 
-        if (commissionAmount > 0) {
-          await this.walletService.credit(
-            booking.field.ownerId,
-            commissionAmount,
-            WalletTransactionType.CREDIT,
-            `No-show compensation for booking ${bookingId}`,
-            bookingId,
-            { actorRole: 'OWNER', transactionPurpose: 'OWNER_ONLINE_SHARE' },
-          );
-        }
+    return result.booking;
+  }
 
-        // Send no-show notification
-        try {
-          const bookingWithField = await tx.booking.findUnique({
-            where: { id: bookingId },
-            include: {
-              field: {
-                select: { name: true },
-              },
-            },
-          });
-
-          if (bookingWithField && player) {
-            await this.notificationsService.sendNoShowNotification(
-              booking.playerId,
-              bookingWithField.field.name,
-              player.noShowCount,
-              player.preferredLanguage || 'en',
-            );
-          }
-        } catch (error) {
-          // Log error but don't fail the transaction
-          console.error('Failed to send no-show notification:', error);
-        }
-
-        return updatedBooking;
-      });
+  /**
+   * Send no-show notification (extracted to separate method)
+   * This runs asynchronously after the transaction commits
+   */
+  private async sendNoShowNotification(
+    playerId: string,
+    fieldName: string,
+    noShowCount: number,
+    preferredLanguage: string,
+  ) {
+    try {
+      await this.notificationsService.sendNoShowNotification(
+        playerId,
+        fieldName,
+        noShowCount,
+        preferredLanguage,
+      );
+    } catch (error) {
+      // Re-throw to be caught by caller
+      throw error;
     }
+  }
 
 
   /**

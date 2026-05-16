@@ -506,7 +506,7 @@ let PaymentController = class PaymentController {
         };
     }
     async processWebhookResult(result, gateway) {
-        await this.prisma.$transaction(async (tx) => {
+        const payment = await this.prisma.$transaction(async (tx) => {
             const payment = await tx.payment.findFirst({
                 where: {
                     transactionId: result.transactionId,
@@ -530,33 +530,61 @@ let PaymentController = class PaymentController {
             }
             if (payment.status !== 'PENDING') {
                 console.log(`Payment ${payment.id} already processed with status ${payment.status}`);
-                return;
+                return payment;
             }
-            const booking = payment.booking;
             if (result.status === 'SUCCESS') {
-                await tx.payment.update({
+                return await tx.payment.update({
                     where: { id: payment.id },
                     data: {
                         status: client_1.PaymentStatus.COMPLETED,
                         gatewayResponse: result.metadata,
                         updatedAt: new Date(),
                     },
+                    include: {
+                        booking: {
+                            include: {
+                                field: {
+                                    include: {
+                                        owner: true,
+                                    },
+                                },
+                                player: true,
+                            },
+                        },
+                    },
                 });
-                await this.bookingConfirmationService.confirmBooking(booking.id, gateway);
             }
             else if (result.status === 'FAILED') {
-                await tx.payment.update({
+                return await tx.payment.update({
                     where: { id: payment.id },
                     data: {
                         status: 'FAILED',
                         gatewayResponse: result.metadata,
                         updatedAt: new Date(),
                     },
+                    include: {
+                        booking: {
+                            include: {
+                                field: {
+                                    include: {
+                                        owner: true,
+                                    },
+                                },
+                                player: true,
+                            },
+                        },
+                    },
                 });
-                const failureReason = result.metadata?.error || result.metadata?.message || 'Payment failed';
-                await this.bookingConfirmationService.handlePaymentFailure(booking.id, failureReason);
             }
+            return payment;
         });
+        if (result.status === 'SUCCESS' && payment.status === client_1.PaymentStatus.COMPLETED) {
+            await this.bookingConfirmationService.confirmBooking(payment.booking.id, gateway);
+        }
+        else if (result.status === 'FAILED' && payment.status === 'FAILED') {
+            const failureReason = result.metadata?.error || result.metadata?.message || 'Payment failed';
+            await this.bookingConfirmationService.handlePaymentFailure(payment.booking.id, failureReason);
+        }
     }
     mapGatewayToEnum(gateway) {
         const mapping = {

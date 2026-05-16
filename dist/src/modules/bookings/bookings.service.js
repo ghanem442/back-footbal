@@ -346,7 +346,7 @@ let BookingsService = class BookingsService {
                 email: user?.email,
             });
         }
-        return this.prisma.$transaction(async (tx) => {
+        const result = await this.prisma.$transaction(async (tx) => {
             const [lockedBooking] = await tx.$queryRaw `
         SELECT id, status, "playerId", "timeSlotId", "depositAmount", "scheduledDate",
                "scheduledStartTime", "paymentDeadline"
@@ -429,29 +429,43 @@ let BookingsService = class BookingsService {
                     data: { status: 'REFUNDED' },
                 });
             }
-            try {
-                const player = await tx.user.findUnique({
-                    where: { id: booking.playerId },
-                    select: { preferredLanguage: true },
-                });
-                const fieldOwner = await tx.user.findUnique({
-                    where: { id: booking.field.ownerId },
-                    select: { preferredLanguage: true },
-                });
-                const formattedDate = new Date(booking.scheduledDate).toLocaleDateString();
-                const refundAmountStr = refundCalculation.refundAmount.toFixed(2);
-                await this.notificationsService.sendCancellationNotification(booking.playerId, updatedBooking.field.name, formattedDate, refundAmountStr, player?.preferredLanguage || 'en');
-                await this.notificationsService.sendCancellationNotification(booking.field.ownerId, updatedBooking.field.name, formattedDate, refundAmountStr, fieldOwner?.preferredLanguage || 'en');
-            }
-            catch (error) {
-                console.error('Failed to send cancellation notifications:', error);
-            }
             return {
                 booking: updatedBooking,
                 refundAmount: refundCalculation.refundAmount,
                 refundPercentage: refundCalculation.refundPercentage,
+                playerId: booking.playerId,
+                fieldOwnerId: booking.field.ownerId,
+                fieldName: updatedBooking.field.name,
+                scheduledDate: booking.scheduledDate,
             };
         });
+        this.sendCancellationNotifications(result.playerId, result.fieldOwnerId, result.fieldName, result.scheduledDate, result.refundAmount).catch((error) => {
+            console.error('Failed to send cancellation notifications:', error);
+        });
+        return {
+            booking: result.booking,
+            refundAmount: result.refundAmount,
+            refundPercentage: result.refundPercentage,
+        };
+    }
+    async sendCancellationNotifications(playerId, fieldOwnerId, fieldName, scheduledDate, refundAmount) {
+        try {
+            const player = await this.prisma.user.findUnique({
+                where: { id: playerId },
+                select: { preferredLanguage: true },
+            });
+            const fieldOwner = await this.prisma.user.findUnique({
+                where: { id: fieldOwnerId },
+                select: { preferredLanguage: true },
+            });
+            const formattedDate = new Date(scheduledDate).toLocaleDateString();
+            const refundAmountStr = refundAmount.toFixed(2);
+            await this.notificationsService.sendCancellationNotification(playerId, fieldName, formattedDate, refundAmountStr, player?.preferredLanguage || 'en');
+            await this.notificationsService.sendCancellationNotification(fieldOwnerId, fieldName, formattedDate, refundAmountStr, fieldOwner?.preferredLanguage || 'en');
+        }
+        catch (error) {
+            throw error;
+        }
     }
     async checkInBooking(bookingId, fieldOwnerId) {
         const booking = await this.prisma.booking.findUnique({
@@ -480,13 +494,14 @@ let BookingsService = class BookingsService {
         return this.updateBookingStatus(bookingId, client_1.BookingStatus.CHECKED_IN, 'Player checked in');
     }
     async markNoShow(bookingId, ownerId) {
-        return this.prisma.$transaction(async (tx) => {
+        const result = await this.prisma.$transaction(async (tx) => {
             const booking = await tx.booking.findUnique({
                 where: { id: bookingId },
                 include: {
                     field: {
                         select: {
                             ownerId: true,
+                            name: true,
                         },
                     },
                 },
@@ -527,24 +542,26 @@ let BookingsService = class BookingsService {
             if (commissionAmount > 0) {
                 await this.walletService.credit(booking.field.ownerId, commissionAmount, client_2.WalletTransactionType.CREDIT, `No-show compensation for booking ${bookingId}`, bookingId, { actorRole: 'OWNER', transactionPurpose: 'OWNER_ONLINE_SHARE' });
             }
-            try {
-                const bookingWithField = await tx.booking.findUnique({
-                    where: { id: bookingId },
-                    include: {
-                        field: {
-                            select: { name: true },
-                        },
-                    },
-                });
-                if (bookingWithField && player) {
-                    await this.notificationsService.sendNoShowNotification(booking.playerId, bookingWithField.field.name, player.noShowCount, player.preferredLanguage || 'en');
-                }
-            }
-            catch (error) {
-                console.error('Failed to send no-show notification:', error);
-            }
-            return updatedBooking;
+            return {
+                booking: updatedBooking,
+                playerId: booking.playerId,
+                fieldName: booking.field.name,
+                noShowCount: player?.noShowCount || 0,
+                preferredLanguage: player?.preferredLanguage || 'en',
+            };
         });
+        this.sendNoShowNotification(result.playerId, result.fieldName, result.noShowCount, result.preferredLanguage).catch((error) => {
+            console.error('Failed to send no-show notification:', error);
+        });
+        return result.booking;
+    }
+    async sendNoShowNotification(playerId, fieldName, noShowCount, preferredLanguage) {
+        try {
+            await this.notificationsService.sendNoShowNotification(playerId, fieldName, noShowCount, preferredLanguage);
+        }
+        catch (error) {
+            throw error;
+        }
     }
     async completeBooking(bookingId) {
         return this.updateBookingStatus(bookingId, client_1.BookingStatus.COMPLETED, 'Booking completed');

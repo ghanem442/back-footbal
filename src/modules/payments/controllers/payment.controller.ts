@@ -708,8 +708,8 @@ export class PaymentController {
    * Requirements: 10.5, 10.6, 10.7, 12.3, 12.4, 12.5
    */
   private async processWebhookResult(result: any, gateway: string) {
-    // Use transaction for idempotency
-    await this.prisma.$transaction(async (tx) => {
+    // First, update payment status in a transaction (fast DB operation only)
+    const payment = await this.prisma.$transaction(async (tx) => {
       // Find payment by transaction ID
       const payment = await tx.payment.findFirst({
         where: {
@@ -737,47 +737,71 @@ export class PaymentController {
       // Check if already processed (idempotency)
       if (payment.status !== 'PENDING') {
         console.log(`Payment ${payment.id} already processed with status ${payment.status}`);
-        return;
+        return payment;
       }
 
-      const booking = payment.booking;
-
+      // Update payment status based on result
       if (result.status === 'SUCCESS') {
-        // Update payment status
-        await tx.payment.update({
+        return await tx.payment.update({
           where: { id: payment.id },
           data: {
             status: PaymentStatus.COMPLETED,
             gatewayResponse: result.metadata,
             updatedAt: new Date(),
           },
+          include: {
+            booking: {
+              include: {
+                field: {
+                  include: {
+                    owner: true,
+                  },
+                },
+                player: true,
+              },
+            },
+          },
         });
-
-        // Use booking confirmation service to handle all confirmation logic
-        await this.bookingConfirmationService.confirmBooking(
-          booking.id,
-          gateway as any,
-        );
-
       } else if (result.status === 'FAILED') {
-        // Update payment status
-        await tx.payment.update({
+        return await tx.payment.update({
           where: { id: payment.id },
           data: {
             status: 'FAILED',
             gatewayResponse: result.metadata,
             updatedAt: new Date(),
           },
+          include: {
+            booking: {
+              include: {
+                field: {
+                  include: {
+                    owner: true,
+                  },
+                },
+                player: true,
+              },
+            },
+          },
         });
-
-        // Use booking confirmation service to handle payment failure
-        const failureReason = result.metadata?.error || result.metadata?.message || 'Payment failed';
-        await this.bookingConfirmationService.handlePaymentFailure(
-          booking.id,
-          failureReason,
-        );
       }
+
+      return payment;
     });
+
+    // Now handle booking confirmation/failure OUTSIDE the transaction
+    // This allows confirmBooking to run its own transaction and do slow operations (QR, notifications)
+    if (result.status === 'SUCCESS' && payment.status === PaymentStatus.COMPLETED) {
+      await this.bookingConfirmationService.confirmBooking(
+        payment.booking.id,
+        gateway as any,
+      );
+    } else if (result.status === 'FAILED' && payment.status === 'FAILED') {
+      const failureReason = result.metadata?.error || result.metadata?.message || 'Payment failed';
+      await this.bookingConfirmationService.handlePaymentFailure(
+        payment.booking.id,
+        failureReason,
+      );
+    }
   }
 
   /**
