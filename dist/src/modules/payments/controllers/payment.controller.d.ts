@@ -4,12 +4,14 @@ import { InitiatePaymentDto } from '../dto/initiate-payment.dto';
 import { UploadScreenshotDto } from '../dto/upload-screenshot.dto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BookingConfirmationService } from '../../bookings/booking-confirmation.service';
+import { RedisService } from '@modules/redis/redis.service';
 import { JwtPayload } from '@modules/auth/interfaces/jwt-payload.interface';
 export declare class PaymentController {
     private readonly paymentService;
     private readonly prisma;
     private readonly bookingConfirmationService;
-    constructor(paymentService: PaymentService, prisma: PrismaService, bookingConfirmationService: BookingConfirmationService);
+    private readonly redisService;
+    constructor(paymentService: PaymentService, prisma: PrismaService, bookingConfirmationService: BookingConfirmationService, redisService: RedisService);
     paymobCallback(req: any, res: any): Promise<any>;
     devConfirmBooking(body: {
         bookingId: string;
@@ -116,6 +118,27 @@ export declare class PaymentController {
         success: boolean;
         data: {
             paymentId: string;
+            status: string;
+            gateway: import(".prisma/client").$Enums.PaymentGateway;
+            createdAt: Date;
+            age: number;
+            requiresScreenshot?: undefined;
+            hasScreenshot?: undefined;
+            screenshotUrl?: undefined;
+            screenshotUploadedAt?: undefined;
+            isVerified?: undefined;
+            isPending?: undefined;
+            isFailed?: undefined;
+            timeRemaining?: undefined;
+        };
+        message: {
+            en: string;
+            ar: string;
+        };
+    } | {
+        success: boolean;
+        data: {
+            paymentId: string;
             status: import(".prisma/client").$Enums.PaymentStatus;
             gateway: import(".prisma/client").$Enums.PaymentGateway;
             requiresScreenshot: boolean;
@@ -125,6 +148,9 @@ export declare class PaymentController {
             isVerified: boolean;
             isPending: boolean;
             isFailed: boolean;
+            createdAt: Date;
+            age: number;
+            timeRemaining: number;
         };
         message: {
             en: string;

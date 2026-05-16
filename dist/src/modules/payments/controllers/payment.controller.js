@@ -19,6 +19,7 @@ const initiate_payment_dto_1 = require("../dto/initiate-payment.dto");
 const upload_screenshot_dto_1 = require("../dto/upload-screenshot.dto");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const booking_confirmation_service_1 = require("../../bookings/booking-confirmation.service");
+const redis_service_1 = require("../../redis/redis.service");
 const throttler_1 = require("@nestjs/throttler");
 const client_1 = require("@prisma/client");
 const jwt_auth_guard_1 = require("../../auth/guards/jwt-auth.guard");
@@ -27,10 +28,11 @@ const public_decorator_1 = require("../../auth/decorators/public.decorator");
 const swagger_1 = require("@nestjs/swagger");
 const error_codes_1 = require("../../../common/constants/error-codes");
 let PaymentController = class PaymentController {
-    constructor(paymentService, prisma, bookingConfirmationService) {
+    constructor(paymentService, prisma, bookingConfirmationService, redisService) {
         this.paymentService = paymentService;
         this.prisma = prisma;
         this.bookingConfirmationService = bookingConfirmationService;
+        this.redisService = redisService;
     }
     async paymobCallback(req, res) {
         console.log('=== PAYMOB CALLBACK RECEIVED ===');
@@ -450,6 +452,22 @@ let PaymentController = class PaymentController {
         };
     }
     async getVerificationStatus(id, user) {
+        const rateLimitKey = `poll:${user.userId}:${id}`;
+        const redis = this.redisService.getCacheClient();
+        const calls = await redis.incr(rateLimitKey);
+        if (calls === 1) {
+            await redis.expire(rateLimitKey, 10);
+        }
+        if (calls > 1) {
+            throw new common_1.BadRequestException({
+                code: 'TOO_MANY_REQUESTS',
+                message: {
+                    en: 'Please wait before polling again',
+                    ar: 'يرجى الانتظار قبل المحاولة مرة أخرى',
+                },
+                retryAfter: 10,
+            });
+        }
         const payment = await this.prisma.payment.findUnique({
             where: { id },
             include: { booking: true },
@@ -458,6 +476,24 @@ let PaymentController = class PaymentController {
             throw new common_1.NotFoundException('Payment not found');
         if (payment.booking.playerId !== user.userId && user.role !== 'ADMIN') {
             throw new common_1.ForbiddenException('Cannot access another user\'s payment');
+        }
+        const age = Date.now() - payment.createdAt.getTime();
+        const PAYMENT_TIMEOUT = 15 * 60 * 1000;
+        if (age > PAYMENT_TIMEOUT && payment.status === 'PENDING') {
+            return {
+                success: false,
+                data: {
+                    paymentId: payment.id,
+                    status: 'EXPIRED',
+                    gateway: payment.gateway,
+                    createdAt: payment.createdAt,
+                    age: Math.floor(age / 1000),
+                },
+                message: {
+                    en: 'Payment window has closed. Please create a new booking.',
+                    ar: 'انتهت مهلة الدفع. يرجى إنشاء حجز جديد.',
+                },
+            };
         }
         const gatewayResponse = payment.gatewayResponse;
         const hasScreenshot = !!gatewayResponse?.screenshotUrl;
@@ -475,6 +511,9 @@ let PaymentController = class PaymentController {
                 isVerified: payment.status === 'COMPLETED',
                 isPending: payment.status === 'PENDING',
                 isFailed: payment.status === 'FAILED',
+                createdAt: payment.createdAt,
+                age: Math.floor(age / 1000),
+                timeRemaining: Math.max(0, Math.floor((PAYMENT_TIMEOUT - age) / 1000)),
             },
             message: {
                 en: 'Verification status retrieved successfully',
@@ -716,6 +755,7 @@ exports.PaymentController = PaymentController = __decorate([
     (0, swagger_1.ApiBearerAuth)('JWT-auth'),
     __metadata("design:paramtypes", [payment_service_1.PaymentService,
         prisma_service_1.PrismaService,
-        booking_confirmation_service_1.BookingConfirmationService])
+        booking_confirmation_service_1.BookingConfirmationService,
+        redis_service_1.RedisService])
 ], PaymentController);
 //# sourceMappingURL=payment.controller.js.map

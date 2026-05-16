@@ -15,6 +15,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { BookingsModule } from '@modules/bookings/bookings.module';
 import { WalletModule } from '@modules/wallet/wallet.module';
 import { LoggerModule } from '@modules/logger/logger.module';
+import { RedisModule } from '@modules/redis/redis.module';
 
 /**
  * Payment Module
@@ -40,6 +41,7 @@ import { LoggerModule } from '@modules/logger/logger.module';
     forwardRef(() => BookingsModule),
     forwardRef(() => WalletModule),
     LoggerModule,
+    RedisModule,
   ],
   controllers: [PaymentController],
   providers: [

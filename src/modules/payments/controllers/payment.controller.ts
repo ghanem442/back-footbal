@@ -4,6 +4,7 @@ import { InitiatePaymentDto } from '../dto/initiate-payment.dto';
 import { UploadScreenshotDto } from '../dto/upload-screenshot.dto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BookingConfirmationService } from '../../bookings/booking-confirmation.service';
+import { RedisService } from '@modules/redis/redis.service';
 import { Throttle } from '@nestjs/throttler';
 import { PaymentStatus } from '@prisma/client';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
@@ -29,6 +30,7 @@ export class PaymentController {
     private readonly paymentService: PaymentService,
     private readonly prisma: PrismaService,
     private readonly bookingConfirmationService: BookingConfirmationService,
+    private readonly redisService: RedisService,
   ) {}
 
   /**
@@ -624,12 +626,39 @@ export class PaymentController {
   /**
    * Get payment verification status
    * GET /payments/:id/verification-status
+   * 
+   * Implements:
+   * - Redis-based rate limiting (1 request per 10 seconds per user per payment)
+   * - Payment timeout (15 minutes) - stops accepting polls after timeout
    */
   @Get(':id/verification-status')
   async getVerificationStatus(
     @Param('id') id: string,
     @CurrentUser() user: JwtPayload,
   ) {
+    // Rate limiting: 1 request per 10 seconds per user per payment
+    const rateLimitKey = `poll:${user.userId}:${id}`;
+    const redis = this.redisService.getCacheClient();
+    
+    const calls = await redis.incr(rateLimitKey);
+    
+    if (calls === 1) {
+      // First call - set expiration
+      await redis.expire(rateLimitKey, 10); // Reset every 10 seconds
+    }
+    
+    if (calls > 1) {
+      throw new BadRequestException({
+        code: 'TOO_MANY_REQUESTS',
+        message: {
+          en: 'Please wait before polling again',
+          ar: 'يرجى الانتظار قبل المحاولة مرة أخرى',
+        },
+        retryAfter: 10,
+      });
+    }
+
+    // Fetch payment
     const payment = await this.prisma.payment.findUnique({
       where: { id },
       include: { booking: true },
@@ -638,6 +667,27 @@ export class PaymentController {
     if (!payment) throw new NotFoundException('Payment not found');
     if (payment.booking.playerId !== user.userId && user.role !== 'ADMIN') {
       throw new ForbiddenException('Cannot access another user\'s payment');
+    }
+
+    // Check payment timeout (15 minutes)
+    const age = Date.now() - payment.createdAt.getTime();
+    const PAYMENT_TIMEOUT = 15 * 60 * 1000; // 15 minutes in milliseconds
+    
+    if (age > PAYMENT_TIMEOUT && payment.status === 'PENDING') {
+      return {
+        success: false,
+        data: {
+          paymentId: payment.id,
+          status: 'EXPIRED',
+          gateway: payment.gateway,
+          createdAt: payment.createdAt,
+          age: Math.floor(age / 1000), // Age in seconds
+        },
+        message: {
+          en: 'Payment window has closed. Please create a new booking.',
+          ar: 'انتهت مهلة الدفع. يرجى إنشاء حجز جديد.',
+        },
+      };
     }
 
     const gatewayResponse = payment.gatewayResponse as any;
@@ -657,6 +707,9 @@ export class PaymentController {
         isVerified: payment.status === 'COMPLETED',
         isPending: payment.status === 'PENDING',
         isFailed: payment.status === 'FAILED',
+        createdAt: payment.createdAt,
+        age: Math.floor(age / 1000), // Age in seconds
+        timeRemaining: Math.max(0, Math.floor((PAYMENT_TIMEOUT - age) / 1000)), // Remaining time in seconds
       },
       message: {
         en: 'Verification status retrieved successfully',

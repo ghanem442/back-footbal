@@ -24,6 +24,7 @@ const prisma_module_1 = require("../prisma/prisma.module");
 const bookings_module_1 = require("../bookings/bookings.module");
 const wallet_module_1 = require("../wallet/wallet.module");
 const logger_module_1 = require("../logger/logger.module");
+const redis_module_1 = require("../redis/redis.module");
 let PaymentModule = class PaymentModule {
 };
 exports.PaymentModule = PaymentModule;
@@ -35,6 +36,7 @@ exports.PaymentModule = PaymentModule = __decorate([
             (0, common_1.forwardRef)(() => bookings_module_1.BookingsModule),
             (0, common_1.forwardRef)(() => wallet_module_1.WalletModule),
             logger_module_1.LoggerModule,
+            redis_module_1.RedisModule,
         ],
         controllers: [payment_controller_1.PaymentController],
         providers: [
