@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Param, UseGuards, Request, Get, HttpCode, HttpStatus, Headers, RawBodyRequest, Req, BadRequestException, NotFoundException, ForbiddenException, Res } from '@nestjs/common';
+import { Controller, Post, Body, Param, UseGuards, Request, Get, HttpCode, HttpStatus, Headers, RawBodyRequest, Req, BadRequestException, NotFoundException, ForbiddenException, Res, HttpException } from '@nestjs/common';
 import { PaymentService } from '../services/payment.service';
 import { InitiatePaymentDto } from '../dto/initiate-payment.dto';
 import { UploadScreenshotDto } from '../dto/upload-screenshot.dto';
@@ -648,14 +648,17 @@ export class PaymentController {
     }
     
     if (calls > 1) {
-      throw new BadRequestException({
-        code: 'TOO_MANY_REQUESTS',
-        message: {
-          en: 'Please wait before polling again',
-          ar: 'يرجى الانتظار قبل المحاولة مرة أخرى',
+      throw new HttpException(
+        {
+          code: 'TOO_MANY_REQUESTS',
+          message: {
+            en: 'Please wait before polling again',
+            ar: 'يرجى الانتظار قبل المحاولة مرة أخرى',
+          },
+          retryAfter: 10,
         },
-        retryAfter: 10,
-      });
+        HttpStatus.TOO_MANY_REQUESTS, // 429
+      );
     }
 
     // Fetch payment

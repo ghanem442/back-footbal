@@ -28,6 +28,7 @@ const reviews_module_1 = require("./modules/reviews/reviews.module");
 const logger_module_1 = require("./modules/logger/logger.module");
 const payment_module_1 = require("./modules/payments/payment.module");
 const storage_module_1 = require("./modules/storage/storage.module");
+const cloudinary_module_1 = require("./modules/cloudinary/cloudinary.module");
 const email_module_1 = require("./modules/email/email.module");
 const health_controller_1 = require("./common/health/health.controller");
 const config_module_1 = require("./config/config.module");
@@ -104,6 +105,7 @@ exports.AppModule = AppModule = __decorate([
             notifications_module_1.NotificationsModule,
             reviews_module_1.ReviewsModule,
             storage_module_1.StorageModule,
+            cloudinary_module_1.CloudinaryModule,
             email_module_1.EmailModule,
         ],
         controllers: [app_controller_1.AppController, health_controller_1.HealthController],

@@ -459,14 +459,14 @@ let PaymentController = class PaymentController {
             await redis.expire(rateLimitKey, 10);
         }
         if (calls > 1) {
-            throw new common_1.BadRequestException({
+            throw new common_1.HttpException({
                 code: 'TOO_MANY_REQUESTS',
                 message: {
                     en: 'Please wait before polling again',
                     ar: 'يرجى الانتظار قبل المحاولة مرة أخرى',
                 },
                 retryAfter: 10,
-            });
+            }, common_1.HttpStatus.TOO_MANY_REQUESTS);
         }
         const payment = await this.prisma.payment.findUnique({
             where: { id },

@@ -19,6 +19,7 @@ import { PaymentModule } from '@modules/payments/payment.module';
 // import { UsersModule } from '@modules/users/users.module';
 // import { JobsModule } from '@modules/jobs/jobs.module';
 import { StorageModule } from '@modules/storage/storage.module';
+import { CloudinaryModule } from '@modules/cloudinary/cloudinary.module';
 import { EmailModule } from '@modules/email/email.module';
 import { HealthController } from '@common/health/health.controller';
 import { AppConfigModule } from '@config/config.module';
@@ -98,6 +99,7 @@ import Redis from 'ioredis';
     ReviewsModule,
     // JobsModule,
     StorageModule,
+    CloudinaryModule,
     EmailModule,
   ],
   controllers: [AppController, HealthController],
