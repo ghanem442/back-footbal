@@ -22,13 +22,14 @@ let TimeSlotsService = class TimeSlotsService {
         this.redisService = redisService;
     }
     async createTimeSlot(userId, dto) {
-        const idempotencyKey = `timeslot:${userId}:${dto.fieldId}:${dto.date}:${dto.startTime}:${dto.endTime}`;
+        const idempotencyKey = `timeslot:${userId}:${dto.fieldId}:${dto.date}:${dto.startTime}:${dto.endTime}:${dto.price}`;
         const redis = this.redisService.getCacheClient();
         const existing = await redis.get(idempotencyKey);
         if (existing) {
             console.log(`[Idempotency] Returning cached result for key: ${idempotencyKey}`);
             return JSON.parse(existing);
         }
+        console.log(`[TimeSlot] Creating new time slot: ${dto.date} ${dto.startTime}-${dto.endTime} for field ${dto.fieldId}`);
         const field = await this.prisma.field.findUnique({
             where: { id: dto.fieldId },
         });
@@ -124,8 +125,8 @@ let TimeSlotsService = class TimeSlotsService {
             startTime: timeSlot.startTime.toISOString().substring(11, 16),
             endTime: timeSlot.endTime.toISOString().substring(11, 16),
         };
-        await redis.set(idempotencyKey, JSON.stringify(formattedTimeSlot), { EX: 10 });
-        console.log(`[Idempotency] Cached result for key: ${idempotencyKey} (TTL: 10s)`);
+        await redis.set(idempotencyKey, JSON.stringify(formattedTimeSlot), { EX: 3 });
+        console.log(`[Idempotency] Cached result for key: ${idempotencyKey} (TTL: 3s)`);
         return formattedTimeSlot;
     }
     parseTime(timeStr) {

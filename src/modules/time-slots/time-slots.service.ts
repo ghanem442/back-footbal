@@ -27,13 +27,13 @@ export class TimeSlotsService {
    * - Start time is before end time
    * - No overlapping slots on the same field and date
    * 
-   * Implements Redis-based idempotency to prevent duplicate requests within 10 seconds
+   * Implements Redis-based idempotency to prevent duplicate requests within 3 seconds
    */
   async createTimeSlot(userId: string, dto: CreateTimeSlotDto) {
     // Create a unique idempotency key for this exact request
-    const idempotencyKey = `timeslot:${userId}:${dto.fieldId}:${dto.date}:${dto.startTime}:${dto.endTime}`;
+    const idempotencyKey = `timeslot:${userId}:${dto.fieldId}:${dto.date}:${dto.startTime}:${dto.endTime}:${dto.price}`;
     
-    // Check if same request was made in last 10 seconds
+    // Check if same request was made in last 3 seconds (reduced from 10)
     const redis = this.redisService.getCacheClient();
     const existing = await redis.get(idempotencyKey);
     
@@ -42,6 +42,8 @@ export class TimeSlotsService {
       console.log(`[Idempotency] Returning cached result for key: ${idempotencyKey}`);
       return JSON.parse(existing);
     }
+
+    console.log(`[TimeSlot] Creating new time slot: ${dto.date} ${dto.startTime}-${dto.endTime} for field ${dto.fieldId}`);
 
     // Validate field ownership
     const field = await this.prisma.field.findUnique({
@@ -177,9 +179,9 @@ export class TimeSlotsService {
       endTime: timeSlot.endTime.toISOString().substring(11, 16),     // "10:00"
     };
 
-    // Cache the result for 10 seconds to prevent duplicate requests
-    await redis.set(idempotencyKey, JSON.stringify(formattedTimeSlot), { EX: 10 });
-    console.log(`[Idempotency] Cached result for key: ${idempotencyKey} (TTL: 10s)`);
+    // Cache the result for 3 seconds to prevent duplicate requests (reduced from 10)
+    await redis.set(idempotencyKey, JSON.stringify(formattedTimeSlot), { EX: 3 });
+    console.log(`[Idempotency] Cached result for key: ${idempotencyKey} (TTL: 3s)`);
 
     return formattedTimeSlot;
   }
