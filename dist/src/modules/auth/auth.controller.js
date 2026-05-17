@@ -601,10 +601,10 @@ __decorate([
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     (0, throttler_1.SkipThrottle)(),
     (0, common_1.UseGuards)(rate_limit_guard_1.RateLimitGuard),
-    (0, rate_limit_decorator_1.RateLimit)({ ttl: 900, limit: 5 }),
+    (0, rate_limit_decorator_1.RateLimit)({ ttl: 60, limit: 5 }),
     (0, swagger_1.ApiOperation)({
         summary: 'User login',
-        description: 'Authenticate user with email and password. Returns user details and JWT tokens. Rate limited to 5 attempts per 15 minutes.',
+        description: 'Authenticate user with email and password. Returns user details and JWT tokens. Rate limited to 5 attempts per minute.',
     }),
     (0, swagger_1.ApiBody)({ type: login_dto_1.LoginDto }),
     (0, swagger_1.ApiResponse)({
@@ -747,7 +747,7 @@ __decorate([
     (0, common_1.Post)('forgot-password'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     (0, common_1.UseGuards)(rate_limit_guard_1.RateLimitGuard),
-    (0, rate_limit_decorator_1.RateLimit)({ ttl: 900, limit: 3 }),
+    (0, rate_limit_decorator_1.RateLimit)({ ttl: 60, limit: 3 }),
     (0, swagger_1.ApiOperation)({ summary: 'Request password reset (OTP-based)' }),
     __param(0, (0, common_1.Body)(new common_1.ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))),
     __metadata("design:type", Function),
@@ -830,7 +830,7 @@ __decorate([
     (0, common_1.Post)('resend-verification'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     (0, common_1.UseGuards)(rate_limit_guard_1.RateLimitGuard),
-    (0, rate_limit_decorator_1.RateLimit)({ ttl: 900, limit: 3 }),
+    (0, rate_limit_decorator_1.RateLimit)({ ttl: 60, limit: 3 }),
     (0, swagger_1.ApiOperation)({
         summary: 'Resend email verification',
         description: 'Resend email verification link. Rate limited to 3 attempts per 15 minutes.',

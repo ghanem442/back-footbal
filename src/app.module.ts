@@ -72,8 +72,13 @@ import Redis from 'ioredis';
           throttlers: [
             {
               name: 'default',
-              ttl: isDev ? 60000 : 900000, // Dev: 1 min, Prod: 15 minutes
-              limit: isDev ? 100 : 100, // Dev: 100 requests, Prod: 100 requests
+              ttl: isDev ? 60000 : 60000, // 1 minute window for all requests
+              limit: isDev ? 100 : 100, // 100 requests per minute
+            },
+            {
+              name: 'login',
+              ttl: 60000, // 1 minute window for login
+              limit: 5, // 5 login attempts per minute
             },
           ],
           storage: new RedisThrottlerStorageService(redis) as ThrottlerStorage,

@@ -81,8 +81,13 @@ exports.AppModule = AppModule = __decorate([
                         throttlers: [
                             {
                                 name: 'default',
-                                ttl: isDev ? 60000 : 900000,
+                                ttl: isDev ? 60000 : 60000,
                                 limit: isDev ? 100 : 100,
+                            },
+                            {
+                                name: 'login',
+                                ttl: 60000,
+                                limit: 5,
                             },
                         ],
                         storage: new redis_throttler_storage_service_1.RedisThrottlerStorageService(redis),
