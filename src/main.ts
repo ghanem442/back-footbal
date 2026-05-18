@@ -80,11 +80,6 @@ async function bootstrap() {
     exclude: ['health'],
   });
 
-  // Serve static files from uploads directory
-  app.useStaticAssets('uploads', {
-    prefix: '/uploads/',
-  });
-
   const i18nService = app.get(I18nService) as I18nService<Record<string, unknown>>;
   app.useGlobalFilters(new BilingualExceptionFilter(i18nService));
   app.useGlobalPipes(new I18nValidationPipe());

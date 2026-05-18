@@ -68,13 +68,17 @@ export class TimeSlotsService {
       );
     }
 
+    // FIX BUG 2: Parse date string directly without timezone conversion
+    // Input format: "YYYY-MM-DD" (e.g., "2026-05-18")
+    // We need to store it as-is without timezone shifts
+    const [year, month, day] = dto.date.split('-').map(Number);
+    const slotDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+    
     // Validate date is not in the past
-    const slotDate = new Date(dto.date + 'T00:00:00.000Z');
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    slotDate.setHours(0, 0, 0, 0);
+    const todayUTC = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0));
 
-    if (slotDate < today) {
+    if (slotDate < todayUTC) {
       throw new BadRequestException(
         await this.i18n.translate('timeSlot.pastDate'),
       );
@@ -118,7 +122,7 @@ export class TimeSlotsService {
     const overlappingSlots = await this.prisma.timeSlot.findMany({
       where: {
         fieldId: dto.fieldId,
-        date: new Date(dto.date + 'T00:00:00.000Z'),
+        date: slotDate,
         OR: [
           {
             // New slot starts during existing slot
@@ -151,26 +155,54 @@ export class TimeSlotsService {
       );
     }
 
-    // Create the time slot
-    const timeSlot = await this.prisma.timeSlot.create({
-      data: {
-        fieldId: dto.fieldId,
-        date: new Date(dto.date + 'T00:00:00.000Z'),
-        startTime: new Date(`1970-01-01T${dto.startTime}:00.000Z`),
-        endTime: new Date(`1970-01-01T${dto.endTime}:00.000Z`),
-        price: dto.price,
-        status: SlotStatus.AVAILABLE,
-      },
-      include: {
-        field: {
-          select: {
-            id: true,
-            name: true,
-            address: true,
+    // FIX BUG 1: Create the time slot and verify it was saved BEFORE caching
+    let timeSlot;
+    try {
+      timeSlot = await this.prisma.timeSlot.create({
+        data: {
+          fieldId: dto.fieldId,
+          date: slotDate,
+          startTime: new Date(`1970-01-01T${dto.startTime}:00.000Z`),
+          endTime: new Date(`1970-01-01T${dto.endTime}:00.000Z`),
+          price: dto.price,
+          status: SlotStatus.AVAILABLE,
+        },
+        include: {
+          field: {
+            select: {
+              id: true,
+              name: true,
+              address: true,
+            },
           },
         },
-      },
-    });
+      });
+
+      // Verify the slot was actually saved to the database
+      const verifySlot = await this.prisma.timeSlot.findUnique({
+        where: { id: timeSlot.id },
+      });
+
+      if (!verifySlot) {
+        console.error(`[TimeSlot] CRITICAL: Slot ${timeSlot.id} was created but not found in DB!`);
+        throw new Error('Time slot creation failed - database verification failed');
+      }
+
+      console.log(`[TimeSlot] ✅ Slot ${timeSlot.id} created and verified in database`);
+      console.log(`[TimeSlot] Date saved: ${verifySlot.date.toISOString()} (should be ${dto.date})`);
+    } catch (error: any) {
+      console.error(`[TimeSlot] ❌ Database error during slot creation:`, error);
+      
+      // Check for unique constraint violations (Prisma error code)
+      if (error?.code === 'P2002') {
+        throw new BadRequestException(
+          'A time slot with these exact details already exists',
+        );
+      }
+      
+      // Re-throw the error - do NOT cache failed attempts
+      throw error;
+    }
 
     // Format times as plain strings to avoid timezone issues
     const formattedTimeSlot = {
@@ -179,9 +211,14 @@ export class TimeSlotsService {
       endTime: timeSlot.endTime.toISOString().substring(11, 16),     // "10:00"
     };
 
-    // Cache the result for 3 seconds to prevent duplicate requests (reduced from 10)
-    await redis.set(idempotencyKey, JSON.stringify(formattedTimeSlot), { EX: 3 });
-    console.log(`[Idempotency] Cached result for key: ${idempotencyKey} (TTL: 3s)`);
+    // FIX BUG 1: Only cache AFTER successful database insert and verification
+    try {
+      await redis.set(idempotencyKey, JSON.stringify(formattedTimeSlot), { EX: 3 });
+      console.log(`[Idempotency] ✅ Cached result for key: ${idempotencyKey} (TTL: 3s)`);
+    } catch (cacheError) {
+      // Log cache errors but don't fail the request - slot was created successfully
+      console.error(`[Idempotency] ⚠️  Failed to cache result:`, cacheError);
+    }
 
     return formattedTimeSlot;
   }
@@ -212,20 +249,22 @@ export class TimeSlotsService {
       where.fieldId = fieldId;
     }
 
-    // Filter by date range if provided
+    // Filter by date range if provided (FIX BUG 2: proper date parsing)
     if (startDate || endDate) {
       where.date = {};
       if (startDate) {
-        where.date.gte = new Date(startDate + 'T00:00:00.000Z');
+        const [year, month, day] = startDate.split('-').map(Number);
+        where.date.gte = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
       }
       if (endDate) {
-        where.date.lte = new Date(endDate + 'T00:00:00.000Z');
+        const [year, month, day] = endDate.split('-').map(Number);
+        where.date.lte = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
       }
     }
 
     // Calculate current datetime for future filtering
     const now = new Date();
-    const currentDate = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
+    const currentDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0));
     const hours = now.getUTCHours().toString().padStart(2, '0');
     const minutes = now.getUTCMinutes().toString().padStart(2, '0');
     const currentTime = new Date(`1970-01-01T${hours}:${minutes}:00.000Z`);
@@ -360,18 +399,21 @@ export class TimeSlotsService {
 
     // Check for overlapping slots if date or time is being updated
     if (dto.date || dto.startTime || dto.endTime) {
-      const newDate = dto.date
-        ? new Date(dto.date + 'T00:00:00.000Z')
-        : timeSlot.date;
+      // FIX BUG 2: Parse date string directly without timezone conversion
+      let newDate;
+      if (dto.date) {
+        const [year, month, day] = dto.date.split('-').map(Number);
+        newDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+      } else {
+        newDate = timeSlot.date;
+      }
 
       // Validate date is not in the past if being updated
       if (dto.date) {
-        const slotDate = new Date(dto.date + 'T00:00:00.000Z');
         const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        slotDate.setHours(0, 0, 0, 0);
+        const todayUTC = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0));
 
-        if (slotDate < today) {
+        if (newDate < todayUTC) {
           throw new BadRequestException(
             await this.i18n.translate('timeSlot.pastDate'),
           );
@@ -419,7 +461,9 @@ export class TimeSlotsService {
     // Build update data
     const updateData: any = {};
     if (dto.date) {
-      updateData.date = new Date(dto.date + 'T00:00:00.000Z');
+      // FIX BUG 2: Parse date string directly without timezone conversion
+      const [year, month, day] = dto.date.split('-').map(Number);
+      updateData.date = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
     }
     if (dto.startTime) {
       updateData.startTime = new Date(`1970-01-01T${dto.startTime}:00.000Z`);
@@ -565,14 +609,17 @@ export class TimeSlotsService {
       );
     }
 
-    // Validate date range
-    const startDate = new Date(dto.startDate + 'T00:00:00.000Z');
-    const endDate = new Date(dto.endDate + 'T00:00:00.000Z');
+    // Validate date range (FIX BUG 2: proper date parsing)
+    const [startYear, startMonth, startDay] = dto.startDate.split('-').map(Number);
+    const [endYear, endMonth, endDay] = dto.endDate.split('-').map(Number);
+    
+    const startDate = new Date(Date.UTC(startYear, startMonth - 1, startDay, 0, 0, 0, 0));
+    const endDate = new Date(Date.UTC(endYear, endMonth - 1, endDay, 0, 0, 0, 0));
+    
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    startDate.setHours(0, 0, 0, 0);
+    const todayUTC = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0));
 
-    if (startDate < today) {
+    if (startDate < todayUTC) {
       throw new BadRequestException(
         await this.i18n.translate('timeSlot.pastDate'),
       );
@@ -652,7 +699,7 @@ export class TimeSlotsService {
       }
     }
 
-    // Check for overlapping slots in a transaction
+    // Check for overlapping slots in a transaction (FIX BUG 1: add verification)
     const result = await this.prisma.$transaction(async (tx) => {
       // Check for overlapping slots for all dates and time ranges
       for (const slot of slotsToCreate) {
@@ -703,8 +750,38 @@ export class TimeSlotsService {
         data: slotsToCreate,
       });
 
+      console.log(`[BulkTimeSlot] ✅ Created ${createdSlots.count} slots in database`);
+
+      // Verify at least one slot was created
+      if (createdSlots.count === 0) {
+        console.error(`[BulkTimeSlot] ❌ CRITICAL: createMany returned count=0 but no error thrown`);
+        throw new Error('Bulk time slot creation failed - no slots were created');
+      }
+
+      // Sample verification: check if first slot exists
+      if (slotsToCreate.length > 0) {
+        const firstSlot = slotsToCreate[0];
+        const verifyCount = await tx.timeSlot.count({
+          where: {
+            fieldId: firstSlot.fieldId,
+            date: firstSlot.date,
+            startTime: firstSlot.startTime,
+            endTime: firstSlot.endTime,
+          },
+        });
+
+        if (verifyCount === 0) {
+          console.error(`[BulkTimeSlot] ❌ CRITICAL: Verification failed - first slot not found in DB`);
+          throw new Error('Bulk time slot creation failed - database verification failed');
+        }
+
+        console.log(`[BulkTimeSlot] ✅ Verified slots exist in database`);
+      }
+
       return createdSlots;
     });
+
+    console.log(`[BulkTimeSlot] ✅ Transaction committed successfully - ${result.count} slots created`);
 
     return {
       count: result.count,
