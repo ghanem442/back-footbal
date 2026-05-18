@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class VerifyBookingIdDto {
@@ -9,4 +9,13 @@ export class VerifyBookingIdDto {
   @IsNotEmpty()
   @IsString()
   bookingId!: string;
+
+  @ApiProperty({
+    description: 'Field ID (optional, for context)',
+    example: 'clh1234567890',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  fieldId?: string;
 }
