@@ -20,6 +20,7 @@ import {
   ApiQuery,
   ApiBearerAuth,
 } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { TimeSlotsService } from './time-slots.service';
 import { CreateTimeSlotDto } from './dto/create-time-slot.dto';
 import { UpdateTimeSlotDto } from './dto/update-time-slot.dto';
@@ -60,6 +61,8 @@ export class TimeSlotsController {
       success: true,
       data: timeSlot,
       message,
+      // Include the date for proper frontend refresh
+      createdDate: createTimeSlotDto.date,
       timestamp: new Date().toISOString(),
     };
   }
@@ -69,22 +72,25 @@ export class TimeSlotsController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Bulk create time slots',
-    description: 'Field owners can create multiple time slots at once for recurring schedules. Validates no overlapping slots exist.',
+    description: 'Field owners can create multiple time slots at once for recurring schedules. Skips slots that already exist instead of failing.',
   })
   @ApiBody({ type: BulkCreateTimeSlotsDto })
   @ApiResponse({
     status: 201,
-    description: 'Time slots created successfully',
+    description: 'Time slots created successfully (some may have been skipped if they already existed)',
     schema: {
       example: {
         success: true,
         data: {
-          created: 10,
-          timeSlots: [],
+          created: 6,
+          skipped: 1,
+          skippedDates: ['2026-05-19'],
+          dates: 7,
+          timeRanges: 1,
         },
         message: {
-          en: 'Time slots created successfully',
-          ar: 'تم إنشاء الفترات الزمنية بنجاح',
+          en: '6 time slots created successfully, 1 skipped (already exists)',
+          ar: 'تم إنشاء 6 فترات زمنية بنجاح، تم تخطي 1 (موجودة بالفعل)',
         },
         timestamp: '2024-01-15T10:30:00Z',
       },
@@ -92,7 +98,7 @@ export class TimeSlotsController {
   })
   @ApiResponse({
     status: 400,
-    description: 'Invalid time range or overlapping slots',
+    description: 'Invalid time range or all slots already exist',
   })
   @ApiResponse({
     status: 403,
@@ -107,7 +113,21 @@ export class TimeSlotsController {
       bulkCreateDto,
     );
 
-    const message = await this.i18n.getBilingualMessage('timeSlot.bulkCreated');
+    // Create a human-readable message based on results
+    let message;
+    if (result.skipped === 0) {
+      // All slots created successfully
+      message = {
+        en: `${result.created} time slots created successfully`,
+        ar: `تم إنشاء ${result.created} فترة زمنية بنجاح`,
+      };
+    } else {
+      // Some slots were skipped
+      message = {
+        en: `${result.created} time slots created successfully, ${result.skipped} skipped (already exist)`,
+        ar: `تم إنشاء ${result.created} فترة زمنية بنجاح، تم تخطي ${result.skipped} (موجودة بالفعل)`,
+      };
+    }
 
     return {
       success: true,
@@ -118,7 +138,12 @@ export class TimeSlotsController {
   }
 
   @Get()
+  @SkipThrottle() // Skip rate limiting on GET requests - users need to refresh frequently
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Query available time slots',
+    description: 'Get available time slots with filtering by field and date range. No rate limiting applied.',
+  })
   async queryTimeSlots(@Query() queryDto: QueryTimeSlotsDto) {
     const result = await this.timeSlotsService.queryTimeSlots(queryDto);
 

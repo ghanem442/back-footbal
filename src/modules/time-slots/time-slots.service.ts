@@ -150,9 +150,21 @@ export class TimeSlotsService {
     });
 
     if (overlappingSlots.length > 0) {
-      throw new BadRequestException(
-        await this.i18n.translate('timeSlot.overlappingSlot'),
-      );
+      // Return a clear, app-friendly error message
+      throw new BadRequestException({
+        code: 'SLOT_ALREADY_EXISTS',
+        message: {
+          en: 'This time slot already exists',
+          ar: 'هذه الفترة الزمنية موجودة بالفعل',
+        },
+        date: dto.date,
+        startTime: dto.startTime,
+        endTime: dto.endTime,
+        hint: {
+          en: 'The slot is already available. Please refresh the list.',
+          ar: 'الفترة متاحة بالفعل. يرجى تحديث القائمة.',
+        },
+      });
     }
 
     // FIX BUG 1: Create the time slot and verify it was saved BEFORE caching
@@ -699,9 +711,12 @@ export class TimeSlotsService {
       }
     }
 
-    // Check for overlapping slots in a transaction (FIX BUG 1: add verification)
+    // Check for overlapping slots in a transaction - skip existing instead of failing
     const result = await this.prisma.$transaction(async (tx) => {
-      // Check for overlapping slots for all dates and time ranges
+      const slotsToActuallyCreate: typeof slotsToCreate = [];
+      const skippedSlots: Array<{ date: string; startTime: string; endTime: string; reason: string }> = [];
+
+      // Check each slot for overlaps
       for (const slot of slotsToCreate) {
         const overlappingSlots = await tx.timeSlot.findMany({
           where: {
@@ -734,23 +749,62 @@ export class TimeSlotsService {
         });
 
         if (overlappingSlots.length > 0) {
+          // Skip this slot instead of failing
           const dateStr = slot.date.toISOString().split('T')[0];
           const startTimeStr = this.formatTime(slot.startTime);
           const endTimeStr = this.formatTime(slot.endTime);
-          throw new BadRequestException(
-            await this.i18n.translate('timeSlot.overlappingSlotDetails', {
-              args: { date: dateStr, startTime: startTimeStr, endTime: endTimeStr },
-            }),
-          );
+          
+          skippedSlots.push({
+            date: dateStr,
+            startTime: startTimeStr,
+            endTime: endTimeStr,
+            reason: 'Already exists',
+          });
+          
+          console.log(`[BulkTimeSlot] ⏭️  Skipping existing slot: ${dateStr} ${startTimeStr}-${endTimeStr}`);
+        } else {
+          // No overlap, safe to create
+          slotsToActuallyCreate.push(slot);
         }
       }
 
-      // Create all time slots
+      // If ALL slots were skipped, return error
+      if (slotsToActuallyCreate.length === 0 && skippedSlots.length > 0) {
+        throw new BadRequestException({
+          code: 'ALL_SLOTS_EXIST',
+          message: {
+            en: 'All time slots in this range already exist',
+            ar: 'جميع الفترات الزمنية في هذا النطاق موجودة بالفعل',
+          },
+          skipped: skippedSlots.length,
+          skippedSlots: skippedSlots,
+          hint: {
+            en: 'Please refresh the list to see existing slots',
+            ar: 'يرجى تحديث القائمة لرؤية الفترات الموجودة',
+          },
+        });
+      }
+
+      // If no slots to create at all (shouldn't happen but safety check)
+      if (slotsToActuallyCreate.length === 0) {
+        throw new BadRequestException({
+          code: 'NO_SLOTS_TO_CREATE',
+          message: {
+            en: 'No valid time slots to create',
+            ar: 'لا توجد فترات زمنية صالحة للإنشاء',
+          },
+        });
+      }
+
+      // Create only the non-overlapping slots
       const createdSlots = await tx.timeSlot.createMany({
-        data: slotsToCreate,
+        data: slotsToActuallyCreate,
       });
 
       console.log(`[BulkTimeSlot] ✅ Created ${createdSlots.count} slots in database`);
+      if (skippedSlots.length > 0) {
+        console.log(`[BulkTimeSlot] ⏭️  Skipped ${skippedSlots.length} existing slots`);
+      }
 
       // Verify at least one slot was created
       if (createdSlots.count === 0) {
@@ -759,8 +813,8 @@ export class TimeSlotsService {
       }
 
       // Sample verification: check if first slot exists
-      if (slotsToCreate.length > 0) {
-        const firstSlot = slotsToCreate[0];
+      if (slotsToActuallyCreate.length > 0) {
+        const firstSlot = slotsToActuallyCreate[0];
         const verifyCount = await tx.timeSlot.count({
           where: {
             fieldId: firstSlot.fieldId,
@@ -778,13 +832,19 @@ export class TimeSlotsService {
         console.log(`[BulkTimeSlot] ✅ Verified slots exist in database`);
       }
 
-      return createdSlots;
+      return { createdSlots, skippedSlots };
     });
 
-    console.log(`[BulkTimeSlot] ✅ Transaction committed successfully - ${result.count} slots created`);
+    console.log(`[BulkTimeSlot] ✅ Transaction committed - ${result.createdSlots.count} created, ${result.skippedSlots.length} skipped`);
+
+    // Extract unique dates that were skipped
+    const skippedDates = [...new Set(result.skippedSlots.map(s => s.date))];
 
     return {
-      count: result.count,
+      created: result.createdSlots.count,
+      skipped: result.skippedSlots.length,
+      skippedDates: skippedDates,
+      skippedSlots: result.skippedSlots,
       dates: datesToGenerate.length,
       timeRanges: dto.timeRanges.length,
     };
