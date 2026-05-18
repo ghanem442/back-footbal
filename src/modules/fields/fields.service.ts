@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '@modules/prisma/prisma.service';
 import { I18nService } from '@modules/i18n/i18n.service';
@@ -16,6 +17,8 @@ import { FILE_VALIDATION_CONSTANTS } from '@common/utils/file-validation.util';
 
 @Injectable()
 export class FieldsService {
+  private readonly logger = new Logger(FieldsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly i18n: I18nService,
@@ -618,9 +621,12 @@ export class FieldsService {
     userId: string,
     file: Express.Multer.File,
   ): Promise<FieldImage> {
+    this.logger.log(`[UPLOAD_IMAGE] Starting upload for field ${fieldId} by user ${userId}`);
+
     // Check if field exists and is not deleted
     const field = await this.findById(fieldId);
     if (!field) {
+      this.logger.error(`[UPLOAD_IMAGE] Field not found: ${fieldId}`);
       throw new NotFoundException(
         await this.i18n.translate('field.notFound'),
       );
@@ -628,6 +634,7 @@ export class FieldsService {
 
     // Validate ownership
     if (field.ownerId !== userId) {
+      this.logger.error(`[UPLOAD_IMAGE] Ownership validation failed. Field owner: ${field.ownerId}, User: ${userId}`);
       throw new ForbiddenException(
         await this.i18n.translate('field.notOwner'),
       );
@@ -639,6 +646,7 @@ export class FieldsService {
     });
 
     if (currentImageCount >= FILE_VALIDATION_CONSTANTS.MAX_IMAGES_PER_FIELD) {
+      this.logger.error(`[UPLOAD_IMAGE] Max images reached for field ${fieldId}: ${currentImageCount}/${FILE_VALIDATION_CONSTANTS.MAX_IMAGES_PER_FIELD}`);
       throw new BadRequestException(
         await this.i18n.translate('field.maxImagesReached'),
       );
@@ -650,27 +658,42 @@ export class FieldsService {
     const extension = file.mimetype === 'image/jpeg' ? 'jpg' : file.mimetype.split('/')[1];
     const filename = `field-${fieldId}-${timestamp}-${randomString}.${extension}`;
 
-    // Upload to storage provider
-    const imageUrl = await this.storageService.upload(
-      file.buffer,
-      filename,
-      file.mimetype,
-    );
+    this.logger.log(`[UPLOAD_IMAGE] Uploading to storage: ${filename}`);
 
-    // Determine if this should be the primary image (first image uploaded)
-    const isPrimary = currentImageCount === 0;
+    try {
+      // Upload to storage provider
+      const imageUrl = await this.storageService.upload(
+        file.buffer,
+        filename,
+        file.mimetype,
+      );
 
-    // Create FieldImage record
-    const fieldImage = await this.prisma.fieldImage.create({
-      data: {
-        fieldId,
-        url: imageUrl,
-        isPrimary,
-        order: currentImageCount,
-      },
-    });
+      this.logger.log(`[UPLOAD_IMAGE] Storage upload successful: ${imageUrl}`);
 
-    return fieldImage;
+      // Determine if this should be the primary image (first image uploaded)
+      const isPrimary = currentImageCount === 0;
+
+      // Create FieldImage record
+      const fieldImage = await this.prisma.fieldImage.create({
+        data: {
+          fieldId,
+          url: imageUrl,
+          isPrimary,
+          order: currentImageCount,
+        },
+      });
+
+      this.logger.log(`[UPLOAD_IMAGE] ✅ Image record created successfully for field ${fieldId}`);
+
+      return fieldImage;
+    } catch (error) {
+      this.logger.error(`[UPLOAD_IMAGE] ❌ Upload failed for field ${fieldId}:`, {
+        filename,
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error;
+    }
   }
 
   /**

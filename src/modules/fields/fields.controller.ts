@@ -13,6 +13,7 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -43,6 +44,8 @@ import { FileValidationPipe } from '@common/pipes/file-validation.pipe';
 @Controller('fields')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class FieldsController {
+  private readonly logger = new Logger(FieldsController.name);
+
   constructor(
     private readonly fieldsService: FieldsService,
     private readonly i18n: I18nService,
@@ -303,26 +306,45 @@ export class FieldsController {
     @Param('id') fieldId: string,
     @UploadedFile(new FileValidationPipe()) file: Express.Multer.File,
   ) {
+    // Guard: Check if file was received
     if (!file) {
+      this.logger.error(`[UPLOAD_FIELD_IMAGE] No file received for field ${fieldId}`);
       throw new BadRequestException(
         await this.i18n.translate('field.noFileProvided'),
       );
     }
 
-    const fieldImage = await this.fieldsService.uploadImage(
-      fieldId,
-      userId,
-      file,
-    );
+    this.logger.log(`[UPLOAD_FIELD_IMAGE] Received file for field ${fieldId}:`, {
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size,
+      fieldname: file.fieldname,
+    });
 
-    const message = await this.i18n.getBilingualMessage('field.imageUploaded');
+    try {
+      const fieldImage = await this.fieldsService.uploadImage(
+        fieldId,
+        userId,
+        file,
+      );
 
-    return {
-      success: true,
-      data: fieldImage,
-      message,
-      timestamp: new Date().toISOString(),
-    };
+      const message = await this.i18n.getBilingualMessage('field.imageUploaded');
+
+      this.logger.log(`[UPLOAD_FIELD_IMAGE] ✅ Upload successful for field ${fieldId}`);
+
+      return {
+        success: true,
+        data: fieldImage,
+        message,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      this.logger.error(`[UPLOAD_FIELD_IMAGE] ❌ Upload failed for field ${fieldId}:`, {
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error;
+    }
   }
 
   @Delete(':id/images/:imageId')

@@ -32,6 +32,14 @@ export class CloudinaryStorageProvider implements StorageProvider {
     this.apiSecret = apiSecret || '';
     this.isConfigured = !!(this.cloudName && apiKey && apiSecret);
 
+    // Log configuration status on startup for debugging
+    this.logger.log('[CLOUDINARY] Configuration check:', {
+      cloud_name: this.cloudName || 'MISSING',
+      api_key: apiKey ? 'SET' : 'MISSING',
+      api_secret: apiSecret ? 'SET' : 'MISSING',
+      isConfigured: this.isConfigured,
+    });
+
     if (this.isConfigured) {
       try {
         // Dynamically import Cloudinary SDK
@@ -44,22 +52,28 @@ export class CloudinaryStorageProvider implements StorageProvider {
         });
         
         this.cloudinary = cloudinary;
-        this.logger.log('Cloudinary storage provider initialized successfully');
+        this.logger.log('✅ Cloudinary storage provider initialized successfully');
       } catch (error) {
-        this.logger.warn(
-          'Cloudinary SDK not installed. Install cloudinary package to use Cloudinary storage: npm install cloudinary',
+        this.logger.error(
+          '❌ Cloudinary SDK not installed. Install cloudinary package: npm install cloudinary',
+          error instanceof Error ? error.stack : error,
         );
         this.isConfigured = false;
       }
     } else {
-      this.logger.warn(
-        'Cloudinary storage not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET environment variables.',
+      this.logger.error(
+        '❌ Cloudinary storage not configured. Missing environment variables:',
+        {
+          CLOUDINARY_CLOUD_NAME: this.cloudName ? '✓' : '✗ MISSING',
+          CLOUDINARY_API_KEY: apiKey ? '✓' : '✗ MISSING',
+          CLOUDINARY_API_SECRET: apiSecret ? '✓' : '✗ MISSING',
+        },
       );
     }
   }
 
   /**
-   * Upload a file to Cloudinary
+   * Upload a file to Cloudinary using stream-based approach
    */
   async upload(
     file: Buffer,
@@ -67,48 +81,79 @@ export class CloudinaryStorageProvider implements StorageProvider {
     mimeType: string,
   ): Promise<string> {
     if (!this.isConfigured) {
-      this.logger.error('Cloudinary storage is not configured');
+      this.logger.error('[CLOUDINARY] Upload attempted but service is not configured');
       throw new InternalServerErrorException(
         'Storage service is not configured. Please contact support.',
       );
     }
 
+    this.logger.log(`[CLOUDINARY] Starting upload: ${filename} (${mimeType}, ${file.length} bytes)`);
+
     try {
       // Generate unique public ID
       const publicId = `football-fields/${uuidv4()}`;
 
-      this.logger.log(`Uploading file to Cloudinary: ${filename} (${mimeType})`);
+      // Use stream-based upload for better error handling
+      const result = await new Promise<any>((resolve, reject) => {
+        const uploadStream = this.cloudinary.uploader.upload_stream(
+          {
+            public_id: publicId,
+            resource_type: 'auto',
+            folder: 'fields',
+          },
+          (error: any, result: any) => {
+            if (error) {
+              this.logger.error('[CLOUDINARY] Upload stream error:', {
+                message: error.message,
+                http_code: error.http_code,
+                error: error,
+              });
+              reject(error);
+            } else {
+              resolve(result);
+            }
+          },
+        );
 
-      const result = await this.cloudinary.uploader.upload(
-        `data:${mimeType};base64,${file.toString('base64')}`,
-        {
-          public_id: publicId,
-          resource_type: 'auto',
-        },
-      );
+        // Pipe buffer to upload stream
+        const { Readable } = require('stream');
+        const bufferStream = Readable.from(file);
+        bufferStream.pipe(uploadStream);
+      });
 
       // Return secure URL
       const url = result.secure_url;
-      this.logger.log(`File uploaded successfully to Cloudinary: ${url}`);
+      this.logger.log(`[CLOUDINARY] ✅ Upload successful: ${url}`);
 
       return url;
     } catch (error) {
-      // Log detailed error information for debugging
-      this.logger.error(
-        `Cloudinary upload failed for file: ${filename}`,
-        error instanceof Error ? error.stack : error,
-      );
+      // Log comprehensive error details for debugging
+      const cloudinaryError = error as any;
+      
+      this.logger.error('[CLOUDINARY] ❌ Upload failed:', {
+        filename,
+        mimeType,
+        fileSize: file.length,
+        errorMessage: cloudinaryError.message,
+        errorName: cloudinaryError.name,
+        httpCode: cloudinaryError.http_code,
+        errorCode: cloudinaryError.error?.code,
+        fullError: cloudinaryError,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
 
       // Extract meaningful error message from Cloudinary error
       let errorMessage = 'Image upload failed';
-      if (error instanceof Error) {
-        // Cloudinary errors often have specific error codes
-        const cloudinaryError = error as any;
-        if (cloudinaryError.http_code) {
-          errorMessage = `Upload failed (HTTP ${cloudinaryError.http_code}): ${cloudinaryError.message || 'Unknown error'}`;
-        } else {
-          errorMessage = `Upload failed: ${error.message}`;
-        }
+      
+      if (cloudinaryError.http_code) {
+        // Cloudinary HTTP error
+        errorMessage = `Upload failed (HTTP ${cloudinaryError.http_code}): ${cloudinaryError.message || 'Unknown error'}`;
+      } else if (cloudinaryError.error?.message) {
+        // Cloudinary API error
+        errorMessage = `Upload failed: ${cloudinaryError.error.message}`;
+      } else if (error instanceof Error) {
+        // Generic error
+        errorMessage = `Upload failed: ${error.message}`;
       }
 
       // Throw user-friendly error
