@@ -276,7 +276,7 @@ export class PaymentController {
    */
   @Post('initiate')
   @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { limit: 10, ttl: 3600000 } }) // 10 per hour per user
+  @Throttle({ default: { limit: 100, ttl: 3600000 } }) // 100 per hour per user (enterprise-level)
   async initiatePayment(
     @Body() dto: InitiatePaymentDto,
     @CurrentUser() user: JwtPayload,

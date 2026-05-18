@@ -259,10 +259,10 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @SkipThrottle() // Skip global throttler
   @UseGuards(RateLimitGuard)
-  @RateLimit({ ttl: 60, limit: 5 }) // 5 attempts per 1 minute (reduced from 15 minutes)
+  @RateLimit({ ttl: 60, limit: 50 }) // 50 attempts per 1 minute (enterprise-level)
   @ApiOperation({
     summary: 'User login',
-    description: 'Authenticate user with email and password. Returns user details and JWT tokens. Rate limited to 5 attempts per minute.',
+    description: 'Authenticate user with email and password. Returns user details and JWT tokens. Rate limited to 50 attempts per minute.',
   })
   @ApiBody({ type: LoginDto })
   @ApiResponse({
@@ -598,7 +598,7 @@ export class AuthController {
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   @UseGuards(RateLimitGuard)
-  @RateLimit({ ttl: 60, limit: 3 }) // 3 attempts per 1 minute (reduced from 15 minutes)
+  @RateLimit({ ttl: 60, limit: 30 }) // 30 attempts per 1 minute (enterprise-level)
   @ApiOperation({ summary: 'Request password reset (OTP-based)' })
   async forgotPassword(
     @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
@@ -791,10 +791,10 @@ export class AuthController {
   @Post('resend-verification')
   @HttpCode(HttpStatus.OK)
   @UseGuards(RateLimitGuard)
-  @RateLimit({ ttl: 60, limit: 3 }) // 3 attempts per 1 minute (reduced from 15 minutes)
+  @RateLimit({ ttl: 60, limit: 30 }) // 30 attempts per 1 minute (enterprise-level)
   @ApiOperation({
     summary: 'Resend email verification',
-    description: 'Resend email verification link. Rate limited to 3 attempts per 15 minutes.',
+    description: 'Resend email verification link. Rate limited to 30 attempts per minute.',
   })
   @ApiBody({ type: ResendVerificationDto })
   @ApiResponse({
