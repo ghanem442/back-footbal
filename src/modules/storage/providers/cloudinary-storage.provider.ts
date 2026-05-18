@@ -24,6 +24,13 @@ export class CloudinaryStorageProvider implements StorageProvider {
   private readonly isConfigured: boolean;
 
   constructor(private readonly configService: ConfigService) {
+    // Log raw environment variables for debugging
+    console.log('[CLOUDINARY] ENV CHECK:', {
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME ? '✅' : '❌ MISSING',
+      api_key: process.env.CLOUDINARY_API_KEY ? '✅' : '❌ MISSING',
+      api_secret: process.env.CLOUDINARY_API_SECRET ? '✅' : '❌ MISSING',
+    });
+
     this.cloudName = this.configService.get<string>('CLOUDINARY_CLOUD_NAME') || '';
     const apiKey = this.configService.get<string>('CLOUDINARY_API_KEY');
     const apiSecret = this.configService.get<string>('CLOUDINARY_API_SECRET');
