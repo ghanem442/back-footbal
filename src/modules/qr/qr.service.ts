@@ -45,6 +45,7 @@ export class QrService {
   /**
    * Generate QR code for a booking
    * Creates QR token, generates image, uploads to storage, and stores in database
+   * Idempotent - returns existing QR code if already generated
    */
   async generateQrCodeForBooking(bookingId: string): Promise<{
     id: string;
@@ -53,14 +54,30 @@ export class QrService {
   }> {
     this.logger.log(`Generating QR code for booking: ${bookingId}`);
 
+    // Check if QR code already exists (idempotency)
+    const existing = await this.prisma.qrCode.findUnique({
+      where: { bookingId },
+    });
+
+    if (existing) {
+      this.logger.log(
+        `QR code already exists for booking ${bookingId}, returning existing`,
+      );
+      return {
+        id: existing.id,
+        qrToken: existing.qrToken,
+        imageUrl: existing.imageUrl,
+      };
+    }
+
     // Generate unique QR token
     const qrToken = this.generateQrToken(bookingId);
 
     // Generate QR code image
     const qrImageBuffer = await this.generateQrCodeImage(qrToken);
 
-    // Upload to storage provider
-    const filename = `qr-codes/${bookingId}.png`;
+    // Upload to storage provider with unique filename to avoid collisions
+    const filename = `qr-codes/${bookingId}-${uuidv4()}.png`;
     const imageUrl = await this.storage.upload(
       qrImageBuffer,
       filename,
@@ -123,5 +140,27 @@ export class QrService {
         usedAt: new Date(),
       },
     });
+  }
+
+  /**
+   * Regenerate QR code for a booking
+   * Deletes existing QR code and generates a new one
+   * Useful for recovery when QR generation fails
+   */
+  async regenerateQrCodeForBooking(bookingId: string): Promise<{
+    id: string;
+    qrToken: string;
+    imageUrl: string;
+  }> {
+    this.logger.log(`Regenerating QR code for booking: ${bookingId}`);
+
+    // Delete existing QR code record if any
+    // Note: Cloudinary assets may be orphaned, but that's acceptable
+    await this.prisma.qrCode.deleteMany({
+      where: { bookingId },
+    });
+
+    // Generate new QR code
+    return this.generateQrCodeForBooking(bookingId);
   }
 }

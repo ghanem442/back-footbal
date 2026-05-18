@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { StorageProvider } from '../interfaces/storage-provider.interface';
 import { v4 as uuidv4 } from 'uuid';
@@ -67,14 +67,17 @@ export class CloudinaryStorageProvider implements StorageProvider {
     mimeType: string,
   ): Promise<string> {
     if (!this.isConfigured) {
-      throw new Error(
-        'Cloudinary storage is not configured. Install cloudinary package and configure Cloudinary credentials.',
+      this.logger.error('Cloudinary storage is not configured');
+      throw new InternalServerErrorException(
+        'Storage service is not configured. Please contact support.',
       );
     }
 
     try {
       // Generate unique public ID
       const publicId = `football-fields/${uuidv4()}`;
+
+      this.logger.log(`Uploading file to Cloudinary: ${filename} (${mimeType})`);
 
       const result = await this.cloudinary.uploader.upload(
         `data:${mimeType};base64,${file.toString('base64')}`,
@@ -86,13 +89,30 @@ export class CloudinaryStorageProvider implements StorageProvider {
 
       // Return secure URL
       const url = result.secure_url;
-      this.logger.log(`File uploaded to Cloudinary: ${url}`);
+      this.logger.log(`File uploaded successfully to Cloudinary: ${url}`);
 
       return url;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to upload file to Cloudinary: ${errorMessage}`);
-      throw new Error(`Cloudinary upload failed: ${errorMessage}`);
+      // Log detailed error information for debugging
+      this.logger.error(
+        `Cloudinary upload failed for file: ${filename}`,
+        error instanceof Error ? error.stack : error,
+      );
+
+      // Extract meaningful error message from Cloudinary error
+      let errorMessage = 'Image upload failed';
+      if (error instanceof Error) {
+        // Cloudinary errors often have specific error codes
+        const cloudinaryError = error as any;
+        if (cloudinaryError.http_code) {
+          errorMessage = `Upload failed (HTTP ${cloudinaryError.http_code}): ${cloudinaryError.message || 'Unknown error'}`;
+        } else {
+          errorMessage = `Upload failed: ${error.message}`;
+        }
+      }
+
+      // Throw user-friendly error
+      throw new InternalServerErrorException(errorMessage);
     }
   }
 
@@ -101,20 +121,31 @@ export class CloudinaryStorageProvider implements StorageProvider {
    */
   async delete(url: string): Promise<void> {
     if (!this.isConfigured) {
-      throw new Error('Cloudinary storage is not configured.');
+      this.logger.error('Cloudinary storage is not configured');
+      throw new InternalServerErrorException(
+        'Storage service is not configured. Please contact support.',
+      );
     }
 
     try {
       // Extract public ID from URL
       const publicId = this.extractPublicIdFromUrl(url);
 
+      this.logger.log(`Deleting file from Cloudinary: ${publicId}`);
+
       await this.cloudinary.uploader.destroy(publicId);
 
-      this.logger.log(`File deleted from Cloudinary: ${publicId}`);
+      this.logger.log(`File deleted successfully from Cloudinary: ${publicId}`);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to delete file from Cloudinary: ${errorMessage}`);
-      throw new Error(`Cloudinary deletion failed: ${errorMessage}`);
+      // Log detailed error but don't throw - deletion failures shouldn't break the flow
+      this.logger.error(
+        `Failed to delete file from Cloudinary: ${url}`,
+        error instanceof Error ? error.stack : error,
+      );
+      
+      // Optionally throw if you want deletion failures to be critical
+      // For now, we'll log and continue since the file might already be deleted
+      // throw new InternalServerErrorException('File deletion failed');
     }
   }
 
@@ -123,7 +154,10 @@ export class CloudinaryStorageProvider implements StorageProvider {
    */
   async getSignedUrl(url: string, expiresIn: number): Promise<string> {
     if (!this.isConfigured) {
-      throw new Error('Cloudinary storage is not configured.');
+      this.logger.error('Cloudinary storage is not configured');
+      throw new InternalServerErrorException(
+        'Storage service is not configured. Please contact support.',
+      );
     }
 
     try {
@@ -143,9 +177,11 @@ export class CloudinaryStorageProvider implements StorageProvider {
 
       return signedUrl;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to generate Cloudinary signed URL: ${errorMessage}`);
-      throw new Error(`Cloudinary signed URL generation failed: ${errorMessage}`);
+      this.logger.error(
+        `Failed to generate Cloudinary signed URL for: ${url}`,
+        error instanceof Error ? error.stack : error,
+      );
+      throw new InternalServerErrorException('Failed to generate signed URL');
     }
   }
 
@@ -188,7 +224,10 @@ export class CloudinaryStorageProvider implements StorageProvider {
    */
   generateSignature(params: Record<string, any>): string {
     if (!this.isConfigured) {
-      throw new Error('Cloudinary storage is not configured.');
+      this.logger.error('Cloudinary storage is not configured');
+      throw new InternalServerErrorException(
+        'Storage service is not configured. Please contact support.',
+      );
     }
 
     try {
@@ -208,9 +247,11 @@ export class CloudinaryStorageProvider implements StorageProvider {
 
       return signature;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to generate Cloudinary signature: ${errorMessage}`);
-      throw new Error(`Cloudinary signature generation failed: ${errorMessage}`);
+      this.logger.error(
+        'Failed to generate Cloudinary signature',
+        error instanceof Error ? error.stack : error,
+      );
+      throw new InternalServerErrorException('Failed to generate upload signature');
     }
   }
 
@@ -219,7 +260,10 @@ export class CloudinaryStorageProvider implements StorageProvider {
    */
   getUploadConfig(): { cloudName: string; apiKey: string } {
     if (!this.isConfigured) {
-      throw new Error('Cloudinary storage is not configured.');
+      this.logger.error('Cloudinary storage is not configured');
+      throw new InternalServerErrorException(
+        'Storage service is not configured. Please contact support.',
+      );
     }
 
     return {

@@ -2170,21 +2170,21 @@ export class AdminService {
       where: { id: payment.bookingId },
     });
 
-    // Generate QR code AFTER payment approval (async, won't block response)
-    this.qrService.generateQrCodeForBooking(payment.bookingId)
-      .then((qrCode) => {
-        this.logger.log(
-          `QR code generated for booking ${payment.bookingId} after payment approval: ${qrCode.imageUrl}`,
-        );
-      })
-      .catch((error) => {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        this.logger.error(
-          `Failed to generate QR code for booking ${payment.bookingId}: ${errorMessage}`,
-        );
-        // QR generation failure doesn't affect payment approval
-        // QR can be regenerated later if needed
-      });
+    // Generate QR code AFTER payment approval (blocking to surface errors properly)
+    try {
+      const qrCode = await this.qrService.generateQrCodeForBooking(payment.bookingId);
+      this.logger.log(
+        `QR code generated for booking ${payment.bookingId} after payment approval: ${qrCode.imageUrl}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `QR generation failed for booking ${payment.bookingId}`,
+        error instanceof Error ? error.stack : error,
+      );
+      // Still don't throw — payment approval shouldn't be rolled back
+      // but at least we have a full stack trace for debugging
+      // QR can be regenerated later using the regenerate endpoint
+    }
 
     this.logger.log(
       `Payment ${paymentId} approved by admin ${adminId}. Booking ${payment.bookingId} confirmed.`,
@@ -2297,6 +2297,40 @@ export class AdminService {
         bookingNumber: updatedBooking.bookingNumber,
         status: updatedBooking.status,
       },
+    };
+  }
+
+  /**
+   * Regenerate QR code for a booking
+   * Useful for recovery when QR generation fails during payment approval
+   * @param bookingId - Booking ID
+   * @returns Regenerated QR code details
+   */
+  async regenerateQrCode(bookingId: string) {
+    // Verify booking exists and is in a valid state
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+    });
+
+    if (!booking) {
+      throw new NotFoundException(`Booking with ID ${bookingId} not found`);
+    }
+
+    if (!['CONFIRMED', 'CHECKED_IN', 'COMPLETED'].includes(booking.status)) {
+      throw new BadRequestException(
+        `Cannot generate QR code for booking with status ${booking.status}. Only CONFIRMED, CHECKED_IN, or COMPLETED bookings can have QR codes.`,
+      );
+    }
+
+    // Regenerate QR code
+    const qrCode = await this.qrService.regenerateQrCodeForBooking(bookingId);
+
+    this.logger.log(`QR code regenerated for booking ${bookingId}`);
+
+    return {
+      id: qrCode.id,
+      qrToken: qrCode.qrToken,
+      imageUrl: qrCode.imageUrl,
     };
   }
 }

@@ -888,4 +888,46 @@ export class AdminController {
       },
     };
   }
+
+  // ============================================
+  // QR CODE MANAGEMENT
+  // ============================================
+
+  @Post('bookings/:bookingId/regenerate-qr')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Regenerate QR code for a booking',
+    description: 'Manually regenerate QR code for a booking. Useful when QR generation fails during payment approval.',
+  })
+  @ApiParam({ name: 'bookingId', type: String, description: 'Booking ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'QR code regenerated successfully',
+    schema: {
+      example: {
+        success: true,
+        data: {
+          id: 'qr-uuid',
+          qrToken: 'booking-id-uuid',
+          imageUrl: 'https://cloudinary.com/qr-codes/booking-id-uuid.png',
+        },
+        message: {
+          en: 'QR code regenerated successfully',
+          ar: 'تم إعادة إنشاء رمز الاستجابة السريعة بنجاح',
+        },
+      },
+    },
+  })
+  async regenerateQrCode(@Param('bookingId') bookingId: string) {
+    const result = await this.adminService.regenerateQrCode(bookingId);
+
+    return {
+      success: true,
+      data: result,
+      message: {
+        en: 'QR code regenerated successfully',
+        ar: 'تم إعادة إنشاء رمز الاستجابة السريعة بنجاح',
+      },
+    };
+  }
 }
