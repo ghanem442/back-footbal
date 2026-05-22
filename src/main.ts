@@ -3,7 +3,6 @@ import { AppModule } from './app.module';
 import { BilingualExceptionFilter } from '@common/filters/bilingual-exception.filter';
 import { I18nValidationPipe } from '@common/pipes/i18n-validation.pipe';
 import { BilingualResponseInterceptor } from '@common/interceptors/bilingual-response.interceptor';
-import { RateLimitHeadersInterceptor } from '@common/interceptors/rate-limit-headers.interceptor';
 import { I18nService } from 'nestjs-i18n';
 import helmet from 'helmet';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -68,11 +67,6 @@ async function bootstrap() {
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept-Language'],
-    exposedHeaders: [
-      'X-RateLimit-Limit',
-      'X-RateLimit-Remaining',
-      'X-RateLimit-Reset',
-    ],
     maxAge: 86400,
   });
 
@@ -85,7 +79,6 @@ async function bootstrap() {
   app.useGlobalPipes(new I18nValidationPipe());
   app.useGlobalInterceptors(
     new BilingualResponseInterceptor(),
-    new RateLimitHeadersInterceptor(),
   );
 
   const enableSwagger = process.env.ENABLE_SWAGGER !== 'false';

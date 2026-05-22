@@ -36,8 +36,6 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { TokenPair } from './interfaces/tokens.interface';
-import { RateLimitGuard } from '@common/guards/rate-limit.guard';
-import { RateLimit } from '@common/decorators/rate-limit.decorator';
 import { AuthLoggerService } from '@common/services/auth-logger.service';
 import { Request, Response } from 'express';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -48,7 +46,6 @@ import { GoogleOAuthGuard } from './guards/google-oauth.guard';
 import { FacebookOAuthGuard } from './guards/facebook-oauth.guard';
 import { GoogleProfile } from './strategies/google.strategy';
 import { FacebookProfile } from './strategies/facebook.strategy';
-import { Throttle, SkipThrottle } from '@nestjs/throttler';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -257,12 +254,9 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @SkipThrottle() // Skip global throttler
-  @UseGuards(RateLimitGuard)
-  @RateLimit({ ttl: 60, limit: 50 }) // 50 attempts per 1 minute (enterprise-level)
   @ApiOperation({
     summary: 'User login',
-    description: 'Authenticate user with email and password. Returns user details and JWT tokens. Rate limited to 50 attempts per minute.',
+    description: 'Authenticate user with email and password. Returns user details and JWT tokens.',
   })
   @ApiBody({ type: LoginDto })
   @ApiResponse({
@@ -297,23 +291,6 @@ export class AuthController {
           message: {
             en: 'Invalid email or password',
             ar: 'البريد الإلكتروني أو كلمة المرور غير صحيحة',
-          },
-        },
-        timestamp: '2024-01-15T10:30:00Z',
-      },
-    },
-  })
-  @ApiResponse({
-    status: 429,
-    description: 'Too many login attempts',
-    schema: {
-      example: {
-        success: false,
-        error: {
-          code: 'RATE_LIMIT_EXCEEDED',
-          message: {
-            en: 'Too many login attempts. Please try again later.',
-            ar: 'محاولات تسجيل دخول كثيرة جداً. يرجى المحاولة لاحقاً.',
           },
         },
         timestamp: '2024-01-15T10:30:00Z',
@@ -597,8 +574,6 @@ export class AuthController {
 
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(RateLimitGuard)
-  @RateLimit({ ttl: 60, limit: 30 }) // 30 attempts per 1 minute (enterprise-level)
   @ApiOperation({ summary: 'Request password reset (OTP-based)' })
   async forgotPassword(
     @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
@@ -790,11 +765,9 @@ export class AuthController {
 
   @Post('resend-verification')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(RateLimitGuard)
-  @RateLimit({ ttl: 60, limit: 30 }) // 30 attempts per 1 minute (enterprise-level)
   @ApiOperation({
     summary: 'Resend email verification',
-    description: 'Resend email verification link. Rate limited to 30 attempts per minute.',
+    description: 'Resend email verification link.',
   })
   @ApiBody({ type: ResendVerificationDto })
   @ApiResponse({
@@ -806,10 +779,6 @@ export class AuthController {
         message: 'If an unverified account exists with this email, a verification link has been sent',
       },
     },
-  })
-  @ApiResponse({
-    status: 429,
-    description: 'Too many resend attempts',
   })
   async resendVerification(
     @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))

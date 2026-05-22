@@ -23,69 +23,14 @@ import { CloudinaryModule } from '@modules/cloudinary/cloudinary.module';
 import { EmailModule } from '@modules/email/email.module';
 import { HealthController } from '@common/health/health.controller';
 import { AppConfigModule } from '@config/config.module';
-import { ThrottlerModule, ThrottlerStorage } from '@nestjs/throttler';
-import { RedisThrottlerStorageService } from '@common/throttler/redis-throttler-storage.service';
 import { ConfigService } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
-import { ThrottlerBehindProxyGuard } from '@common/guards/throttler-behind-proxy.guard';
 import { RequestLoggerMiddleware } from '@common/middleware/request-logger.middleware';
 import { ScheduleModule } from '@nestjs/schedule';
-import Redis from 'ioredis';
 
 @Module({
   imports: [
     AppConfigModule,
     LoggerModule,
-    ThrottlerModule.forRootAsync({
-      imports: [AppConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => {
-        const isDev = configService.get('NODE_ENV') === 'development';
-        
-        // Check if REDIS_URL is provided (Railway, Heroku, etc.)
-        const redisUrl = configService.get('redis.url') || configService.get('REDIS_URL');
-        
-        console.log('🔴 REDIS_URL from config:', redisUrl);
-        console.log('🔴 All env REDIS vars:', {
-          REDIS_URL: process.env.REDIS_URL,
-          REDIS_HOST: process.env.REDIS_HOST,
-          REDISHOST: process.env.REDISHOST,
-        });
-        
-        let redis: Redis;
-        if (redisUrl) {
-          console.log('✅ Using REDIS_URL:', redisUrl);
-          // Use REDIS_URL if provided
-          redis = new Redis(redisUrl);
-        } else {
-          console.log('❌ Falling back to localhost Redis');
-          // Fallback to individual config values
-          redis = new Redis({
-            host: configService.get('REDIS_HOST', 'localhost'),
-            port: configService.get('REDIS_PORT', 6379),
-            password: configService.get('REDIS_PASSWORD'),
-            db: configService.get('REDIS_THROTTLE_DB', 1),
-          });
-        }
-
-        return {
-          throttlers: [
-            {
-              name: 'default',
-              ttl: isDev ? 60000 : 60000, // 1 minute window for all requests
-              limit: isDev ? 1000 : 1000, // 1000 requests per minute (enterprise-level)
-            },
-            {
-              name: 'login',
-              ttl: 60000, // 1 minute window for login
-              limit: 50, // 50 login attempts per minute (enterprise-level)
-            },
-          ],
-          storage: new RedisThrottlerStorageService(redis) as ThrottlerStorage,
-          skipIf: () => isDev, // Skip throttling completely in dev
-        };
-      },
-    }),
     ScheduleModule.forRoot(),
     PrismaModule,
     RedisModule,
@@ -110,10 +55,6 @@ import Redis from 'ioredis';
   controllers: [AppController, HealthController],
   providers: [
     AppService,
-    {
-      provide: APP_GUARD,
-      useClass: ThrottlerBehindProxyGuard,
-    },
   ],
 })
 export class AppModule implements NestModule {

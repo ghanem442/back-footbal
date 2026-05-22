@@ -20,7 +20,6 @@ import {
   ApiQuery,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import { SkipThrottle } from '@nestjs/throttler';
 import { TimeSlotsService } from './time-slots.service';
 import { CreateTimeSlotDto } from './dto/create-time-slot.dto';
 import { UpdateTimeSlotDto } from './dto/update-time-slot.dto';
@@ -138,11 +137,10 @@ export class TimeSlotsController {
   }
 
   @Get()
-  @SkipThrottle() // Skip rate limiting on GET requests - users need to refresh frequently
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Query available time slots',
-    description: 'Get available time slots with filtering by field and date range. No rate limiting applied.',
+    description: 'Get available time slots with filtering by field and date range.',
   })
   async queryTimeSlots(@Query() queryDto: QueryTimeSlotsDto) {
     const result = await this.timeSlotsService.queryTimeSlots(queryDto);

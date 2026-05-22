@@ -5,7 +5,6 @@ import { UploadScreenshotDto } from '../dto/upload-screenshot.dto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BookingConfirmationService } from '../../bookings/booking-confirmation.service';
 import { RedisService } from '@modules/redis/redis.service';
-import { Throttle } from '@nestjs/throttler';
 import { PaymentStatus } from '@prisma/client';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser } from '@modules/auth/decorators/current-user.decorator';
@@ -272,11 +271,10 @@ export class PaymentController {
    * Initiate a payment for a booking
    * POST /payments/initiate
    * 
-   * Requirements: 10.1, 10.2, 10.3, 10.4, 20.3, 20.4
+   * Requirements: 10.1, 10.2, 10.3, 10.4
    */
   @Post('initiate')
   @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { limit: 100, ttl: 3600000 } }) // 100 per hour per user (enterprise-level)
   async initiatePayment(
     @Body() dto: InitiatePaymentDto,
     @CurrentUser() user: JwtPayload,
@@ -628,7 +626,6 @@ export class PaymentController {
    * GET /payments/:id/verification-status
    * 
    * Implements:
-   * - Redis-based rate limiting (1 request per 10 seconds per user per payment)
    * - Payment timeout (15 minutes) - stops accepting polls after timeout
    */
   @Get(':id/verification-status')
@@ -636,31 +633,6 @@ export class PaymentController {
     @Param('id') id: string,
     @CurrentUser() user: JwtPayload,
   ) {
-    // Rate limiting: 1 request per 10 seconds per user per payment
-    const rateLimitKey = `poll:${user.userId}:${id}`;
-    const redis = this.redisService.getCacheClient();
-    
-    const calls = await redis.incr(rateLimitKey);
-    
-    if (calls === 1) {
-      // First call - set expiration
-      await redis.expire(rateLimitKey, 10); // Reset every 10 seconds
-    }
-    
-    if (calls > 1) {
-      throw new HttpException(
-        {
-          code: 'TOO_MANY_REQUESTS',
-          message: {
-            en: 'Please wait before polling again',
-            ar: 'يرجى الانتظار قبل المحاولة مرة أخرى',
-          },
-          retryAfter: 10,
-        },
-        HttpStatus.TOO_MANY_REQUESTS, // 429
-      );
-    }
-
     // Fetch payment
     const payment = await this.prisma.payment.findUnique({
       where: { id },

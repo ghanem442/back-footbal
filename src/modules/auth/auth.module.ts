@@ -13,7 +13,6 @@ import { AppConfigService } from '@config/config.service';
 import { UsersModule } from '@modules/users/users.module';
 import { RedisModule } from '@modules/redis/redis.module';
 import { EmailModule } from '@modules/email/email.module';
-import { RateLimitGuard } from '@common/guards/rate-limit.guard';
 import { AuthLoggerService } from '@common/services/auth-logger.service';
 import { PrismaModule } from '@modules/prisma/prisma.module';
 
@@ -43,7 +42,6 @@ import { PrismaModule } from '@modules/prisma/prisma.module';
     JwtAuthGuard,
     GoogleOAuthGuard,
     FacebookOAuthGuard,
-    RateLimitGuard,
     AuthLoggerService,
   ],
   exports: [AuthService, JwtAuthGuard, PassportModule, JwtModule],

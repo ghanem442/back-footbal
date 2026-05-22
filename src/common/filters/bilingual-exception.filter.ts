@@ -9,7 +9,6 @@ import {
 import { Response } from 'express';
 import { I18nContext, I18nService } from 'nestjs-i18n';
 import { Prisma } from '@prisma/client';
-import { ThrottlerException } from '@nestjs/throttler';
 
 /**
  * Bilingual Exception Filter
@@ -49,15 +48,6 @@ export class BilingualExceptionFilter implements ExceptionFilter {
       status = HttpStatus.BAD_REQUEST;
       errorCode = 'VALIDATION_ERROR';
       message = await this.getBilingualMessage('common.badRequest', currentLang);
-    }
-    // Handle rate limit errors
-    else if (exception instanceof ThrottlerException) {
-      status = HttpStatus.TOO_MANY_REQUESTS;
-      errorCode = 'TOO_MANY_REQUESTS';
-      message = await this.getBilingualMessage('common.tooManyRequests', currentLang);
-      
-      // Add retry-after header
-      response.setHeader('Retry-After', '900'); // 15 minutes
     }
     // Handle HTTP exceptions
     else if (exception instanceof HttpException) {

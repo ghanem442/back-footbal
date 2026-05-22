@@ -31,7 +31,7 @@ export class OtpController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Send OTP',
-    description: 'Generate and send a 6-digit OTP via SMS or Email. OTP expires in 10 minutes. Rate limited to prevent abuse.',
+    description: 'Generate and send a 6-digit OTP via SMS or Email. OTP expires in 10 minutes.',
   })
   @ApiBody({ type: SendOtpDto })
   @ApiResponse({
