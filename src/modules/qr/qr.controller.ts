@@ -28,6 +28,21 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { BookingStatus } from '@prisma/client';
 
+/**
+ * Returns the current calendar date string (YYYY-MM-DD) in Egypt local time.
+ *
+ * Uses the IANA timezone 'Africa/Cairo' via the Intl API so that any future
+ * DST changes are handled automatically by the runtime — no hard-coded offsets.
+ *
+ * Egypt abolished DST in 2011 and is currently always UTC+2, but using the
+ * named timezone keeps the code correct if that policy ever changes.
+ */
+function toEgyptDateString(date: Date): string {
+  // 'en-CA' locale produces the ISO-style YYYY-MM-DD format, which is safe
+  // for string equality comparisons without any further parsing.
+  return date.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
+}
+
 @ApiTags('QR Codes')
 @Controller('qr')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -213,16 +228,14 @@ export class QrController {
       );
     }
 
-    // Validate scheduled date matches current date (UTC-safe)
-    const today = new Date();
-    const todayUTC = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
-    const scheduledDate = new Date(booking.scheduledDate);
-    const scheduledUTC = Date.UTC(scheduledDate.getUTCFullYear(), scheduledDate.getUTCMonth(), scheduledDate.getUTCDate());
+    // Validate scheduled date matches today in Egypt local time.
+    // Using 'Africa/Cairo' via the Intl API automatically accounts for any
+    // DST changes Egypt may introduce in the future (currently UTC+2 all year).
+    const todayEgypt = toEgyptDateString(new Date());
+    const scheduledEgypt = toEgyptDateString(new Date(booking.scheduledDate));
 
-    if (scheduledUTC !== todayUTC) {
-      throw new BadRequestException(
-        'Booking is not scheduled for today',
-      );
+    if (todayEgypt !== scheduledEgypt) {
+      throw new BadRequestException('Booking is not scheduled for today');
     }
 
     // Validate field belongs to authenticated owner
@@ -335,16 +348,14 @@ export class QrController {
       );
     }
 
-    // Validate scheduled date matches current date (UTC-safe)
-    const today = new Date();
-    const todayUTC = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
-    const scheduledDate = new Date(booking.scheduledDate);
-    const scheduledUTC = Date.UTC(scheduledDate.getUTCFullYear(), scheduledDate.getUTCMonth(), scheduledDate.getUTCDate());
+    // Validate scheduled date matches today in Egypt local time.
+    // Using 'Africa/Cairo' via the Intl API automatically accounts for any
+    // DST changes Egypt may introduce in the future (currently UTC+2 all year).
+    const todayEgypt = toEgyptDateString(new Date());
+    const scheduledEgypt = toEgyptDateString(new Date(booking.scheduledDate));
 
-    if (scheduledUTC !== todayUTC) {
-      throw new BadRequestException(
-        'Booking is not scheduled for today',
-      );
+    if (todayEgypt !== scheduledEgypt) {
+      throw new BadRequestException('Booking is not scheduled for today');
     }
 
     // Update booking status to CHECKED_IN
