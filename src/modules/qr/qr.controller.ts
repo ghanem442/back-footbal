@@ -213,13 +213,13 @@ export class QrController {
       );
     }
 
-    // Validate scheduled date matches current date
+    // Validate scheduled date matches current date (UTC-safe)
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayUTC = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
     const scheduledDate = new Date(booking.scheduledDate);
-    scheduledDate.setHours(0, 0, 0, 0);
+    const scheduledUTC = Date.UTC(scheduledDate.getUTCFullYear(), scheduledDate.getUTCMonth(), scheduledDate.getUTCDate());
 
-    if (scheduledDate.getTime() !== today.getTime()) {
+    if (scheduledUTC !== todayUTC) {
       throw new BadRequestException(
         'Booking is not scheduled for today',
       );
@@ -335,13 +335,13 @@ export class QrController {
       );
     }
 
-    // Validate scheduled date matches current date
+    // Validate scheduled date matches current date (UTC-safe)
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayUTC = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
     const scheduledDate = new Date(booking.scheduledDate);
-    scheduledDate.setHours(0, 0, 0, 0);
+    const scheduledUTC = Date.UTC(scheduledDate.getUTCFullYear(), scheduledDate.getUTCMonth(), scheduledDate.getUTCDate());
 
-    if (scheduledDate.getTime() !== today.getTime()) {
+    if (scheduledUTC !== todayUTC) {
       throw new BadRequestException(
         'Booking is not scheduled for today',
       );

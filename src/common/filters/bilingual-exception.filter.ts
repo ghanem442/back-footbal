@@ -134,12 +134,14 @@ export class BilingualExceptionFilter implements ExceptionFilter {
       message = await this.getBilingualMessage('common.internalError', currentLang);
     }
 
-    // If message is a string, try to get bilingual version
+    // If message is a string and looks like a translation key, translate it
+    // Otherwise, keep the original message (it's already a descriptive error)
     if (typeof message === 'string') {
-      message = await this.getBilingualMessage(
-        this.getTranslationKey(errorCode),
-        currentLang,
-      );
+      // Only translate if it looks like a translation key (e.g., "common.error")
+      if (message.includes('.') && message.split('.').length === 2) {
+        message = await this.getBilingualMessage(message, currentLang);
+      }
+      // Otherwise, keep the original descriptive message as-is
     }
 
     // Sanitize error response to remove sensitive data
