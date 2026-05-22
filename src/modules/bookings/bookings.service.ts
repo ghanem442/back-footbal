@@ -304,7 +304,7 @@ export class BookingsService {
     },
   ) {
     const page = filters?.page || 1;
-    const limit = filters?.limit || 30;
+    const limit = filters?.limit || 10;
     const skip = (page - 1) * limit;
 
     const where: Prisma.BookingWhereInput = { playerId: userId };
@@ -956,7 +956,7 @@ export class BookingsService {
       console.log('Filters:', filters);
       
       const page = filters?.page || 1;
-      const limit = filters?.limit || 30;
+      const limit = filters?.limit || 10;
       const offset = (page - 1) * limit;
 
       // Build SQL WHERE conditions
